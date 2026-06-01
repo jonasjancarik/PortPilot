@@ -170,41 +170,155 @@ function findApp(apps, identifier) {
   return apps.find(a => a.id === identifier || a.name.toLowerCase() === identifier.toLowerCase());
 }
 
+/** Resolve PID -> command line for a set of PIDs (used for accurate matching). */
+function getCommandLines(pids) {
+  const map = new Map();
+  if (!pids.length) return map;
+  const platform = os.platform();
+  try {
+    if (platform === 'win32') {
+      const filter = pids.map(p => `ProcessId=${p}`).join(' or ');
+      const out = execSync(
+        `powershell -NoProfile -NonInteractive -Command ` +
+        `"Get-CimInstance Win32_Process -Filter '${filter}' | ` +
+        `Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"`,
+        { encoding: 'utf-8', timeout: 15000, maxBuffer: 8 * 1024 * 1024 }
+      );
+      let data = JSON.parse(out);
+      if (!Array.isArray(data)) data = [data];
+      for (const proc of data) {
+        const pid = parseInt(proc.ProcessId, 10);
+        if (pid) map.set(pid, proc.CommandLine || '');
+      }
+    } else {
+      const out = execSync(`ps -o pid=,command= -p ${pids.join(',')}`, { encoding: 'utf-8', timeout: 10000, maxBuffer: 8 * 1024 * 1024 });
+      for (const line of out.split('\n')) {
+        const m = line.trim().match(/^(\d+)\s+(.*)$/);
+        if (m) map.set(parseInt(m[1], 10), m[2]);
+      }
+    }
+  } catch { /* command lines optional - matching falls back to port */ }
+  return map;
+}
+
+/**
+ * Map apps -> the port they're actually running on.
+ * Mirrors the desktop app's two-phase logic so apps without a preferredPort, or
+ * running on a dynamic port, are still detected (the old code only matched an
+ * exact preferredPort, so those always read "stopped").
+ */
+function computeRunning(apps, activePorts) {
+  const pids = [...new Set(activePorts.map(p => p.pid).filter(Boolean))];
+  const cmds = getCommandLines(pids);
+  const ports = activePorts.map(p => ({ ...p, commandLine: cmds.get(p.pid) || '' }));
+  const matched = new Set();
+  const result = new Map();
+
+  // Phase 1: high-confidence CWD match in the command line.
+  for (const app of apps) {
+    if (!app.cwd) continue;
+    const cwd = app.cwd.toLowerCase();
+    const cwdAlt = cwd.replace(/\\/g, '/');
+    for (const p of ports) {
+      if (matched.has(p.port)) continue;
+      const cl = p.commandLine.toLowerCase();
+      if (cl && (cl.includes(cwd) || cl.includes(cwdAlt))) {
+        result.set(app.id, p);
+        matched.add(p.port);
+        break;
+      }
+    }
+    if (result.has(app.id)) continue;
+    // Folder-name / app-name keyword evidence on any unmatched port.
+    const folder = cwd.split(/[\\/]/).filter(Boolean).pop() || '';
+    const keywords = [folder, ...app.name.toLowerCase().split(/[^a-z0-9]+/)].filter(k => k.length > 3);
+    for (const p of ports) {
+      if (matched.has(p.port)) continue;
+      const cl = p.commandLine.toLowerCase();
+      if (cl && keywords.some(k => cl.includes(k))) {
+        result.set(app.id, p);
+        matched.add(p.port);
+        break;
+      }
+    }
+  }
+
+  // Phase 2: explicit preferredPort match (config is a strong signal).
+  for (const app of apps) {
+    if (result.has(app.id) || !app.preferredPort) continue;
+    const p = ports.find(x => x.port === app.preferredPort);
+    if (!p || matched.has(p.port)) continue;
+    result.set(app.id, p);
+    matched.add(p.port);
+  }
+
+  return result;
+}
+
 function getRunningStatus(apps, activePorts) {
+  const running = computeRunning(apps, activePorts);
   return apps.map(app => {
-    const portInfo = app.preferredPort ? activePorts.find(p => p.port === app.preferredPort) : null;
+    const p = running.get(app.id) || null;
     return {
       id: app.id,
       name: app.name,
       command: app.command,
       cwd: app.cwd,
       preferredPort: app.preferredPort,
+      detectedPort: p ? p.port : null,
       isFavorite: app.isFavorite,
       autoStart: app.autoStart,
       group: app.group || null,
       description: app.description || null,
-      running: !!portInfo,
-      pid: portInfo?.pid || null,
-      processName: portInfo?.processName || null
+      running: !!p,
+      pid: p?.pid || null,
+      processName: p?.processName || null
     };
   });
 }
 
+/**
+ * Start an app and report an HONEST result. When the app has a preferredPort we
+ * poll for it to come up (so a command that fails immediately reports failure
+ * instead of a misleading success). Without a port we can only confirm the
+ * shell spawned, and say so.
+ */
 function startApp(app) {
-  try {
-    const env = { ...process.env, ...app.env };
-    if (app.preferredPort) env.PORT = String(app.preferredPort);
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (res) => { if (!settled) { settled = true; resolve(res); } };
+    try {
+      const env = { ...process.env, ...app.env };
+      if (app.preferredPort) env.PORT = String(app.preferredPort);
 
-    const options = { cwd: app.cwd, env, detached: true, stdio: 'ignore', shell: true };
-    if (os.platform() === 'win32') {
-      exec(`start /B cmd /c "${app.command}"`, options);
-    } else {
-      exec(`nohup ${app.command} &`, options);
+      const options = { cwd: app.cwd, env, detached: true, stdio: 'ignore', shell: true, windowsHide: true };
+      const child = os.platform() === 'win32'
+        ? exec(`start /B cmd /c "${app.command}"`, options)
+        : exec(`nohup ${app.command} >/dev/null 2>&1 &`, options);
+
+      child.on('error', (err) => done({ success: false, error: err.message }));
+      if (typeof child.unref === 'function') child.unref();
+
+      if (app.preferredPort) {
+        let tries = 0;
+        const iv = setInterval(() => {
+          tries++;
+          if (checkPort(app.preferredPort)) {
+            clearInterval(iv);
+            done({ success: true, verified: true, message: `Started ${app.name}; port ${app.preferredPort} is up` });
+          } else if (tries >= 6) {
+            clearInterval(iv);
+            done({ success: false, verified: true, error: `Started ${app.name} but port ${app.preferredPort} never came up within ~6s - check the command, cwd, or its logs` });
+          }
+        }, 1000);
+      } else {
+        // No port to verify against; just catch an immediate spawn failure.
+        setTimeout(() => done({ success: true, verified: false, message: `Started ${app.name} (unverified - no preferredPort set to confirm it bound)` }), 800);
+      }
+    } catch (error) {
+      done({ success: false, error: error.message });
     }
-    return { success: true, message: `Started ${app.name}` };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
+  });
 }
 
 function stopApp(app) {
@@ -247,13 +361,13 @@ server.tool(
     const config = readConfig();
     const ports = scanPorts();
     const apps = config.apps || [];
-    const running = apps.filter(a => a.preferredPort && ports.some(p => p.port === a.preferredPort));
+    const running = computeRunning(apps, ports);
     return {
       content: [{
         type: 'text',
         text: JSON.stringify({
           registeredApps: apps.length,
-          runningApps: running.length,
+          runningApps: running.size,
           activePorts: ports.length,
           favorites: apps.filter(a => a.isFavorite).length,
           groups: (config.groups || []).length
@@ -344,7 +458,7 @@ server.tool(
     const config = readConfig();
     const app = findApp(config.apps || [], identifier);
     if (!app) return { content: [{ type: 'text', text: `App not found: ${identifier}` }], isError: true };
-    const result = startApp(app);
+    const result = await startApp(app);
     return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], isError: !result.success };
   }
 );
@@ -381,8 +495,9 @@ server.tool(
     else if (favorites) apps = apps.filter(a => a.isFavorite);
     else return { content: [{ type: 'text', text: 'Specify group or favorites: true' }], isError: true };
 
-    const results = apps.map(a => ({ name: a.name, ...startApp(a) }));
-    return { content: [{ type: 'text', text: JSON.stringify({ started: results.length, results }, null, 2) }] };
+    const results = await Promise.all(apps.map(async a => ({ name: a.name, ...(await startApp(a)) })));
+    const ok = results.filter(r => r.success).length;
+    return { content: [{ type: 'text', text: JSON.stringify({ attempted: results.length, succeeded: ok, results }, null, 2) }] };
   }
 );
 

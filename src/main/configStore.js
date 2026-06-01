@@ -78,6 +78,7 @@ class ConfigStore {
         // Window behavior
         closeToTray: true,  // Close button minimizes to tray (true) or exits (false)
         stopAppsOnQuit: true,  // Stop PortPilot-managed apps when quitting
+        autoResizeWindow: false,  // Auto-grow/shrink window height to app count (off by default - it fights manual resizing)
 
         // Favorites system
         favoritesExpanded: true,

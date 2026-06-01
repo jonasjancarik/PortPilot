@@ -129,6 +129,10 @@
             <span>Stop running apps when quitting</span>
             <input type="checkbox" id="setting-stop-apps-on-quit" checked>
           </label>
+          <label class="setting-row">
+            <span>Auto-resize window to app count</span>
+            <input type="checkbox" id="setting-auto-resize">
+          </label>
         </div>
         <div class="settings-section">
           <h3>Data</h3>
@@ -274,6 +278,30 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" onclick="closeGroupModal()">Cancel</button>
           <button type="button" class="btn btn-primary" onclick="saveGroupModal()">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Logs Modal -->
+    <div id="modal-logs" class="modal hidden">
+      <div class="modal-content modal-wide modal-logs">
+        <div class="modal-header">
+          <h2>Logs — <span id="logs-app-name"></span></h2>
+          <div class="logs-header-actions">
+            <label class="logs-autoscroll-label" title="Keep scrolled to newest output">
+              <input type="checkbox" id="logs-autoscroll" checked> Auto-scroll
+            </label>
+            <button type="button" class="btn btn-small btn-secondary" id="logs-refresh">Refresh</button>
+            <button type="button" class="btn btn-small btn-secondary" id="logs-copy">Copy</button>
+          </div>
+          <button type="button" class="btn-close" id="logs-close" aria-label="Close"></button>
+        </div>
+        <div class="logs-body">
+          <pre id="logs-stdout" class="logs-pre" aria-label="Standard output"></pre>
+          <div id="logs-stderr-section">
+            <div class="logs-section-label">stderr</div>
+            <pre id="logs-stderr" class="logs-pre logs-pre-err" aria-label="Standard error"></pre>
+          </div>
         </div>
       </div>
     </div>

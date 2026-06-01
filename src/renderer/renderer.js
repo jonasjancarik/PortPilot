@@ -28,6 +28,7 @@ function icon(name, size = 16) {
     kill: `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"/></svg>`,
     home: `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8l6-6 6 6M4 7v6h3v-3h2v3h3V7"/></svg>`,
     globe: `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c-2 2-2 4 0 6s2 4 0 6"/></svg>`,
+    logs: `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4h10M3 8h10M3 12h6"/></svg>`,
   };
   return icons[name] || '';
 }
@@ -295,6 +296,7 @@ function setupEventListeners() {
   document.getElementById('setting-devtools').addEventListener('change', saveSettings);
   document.getElementById('setting-close-to-tray').addEventListener('change', saveSettings);
   document.getElementById('setting-stop-apps-on-quit').addEventListener('change', saveSettings);
+  document.getElementById('setting-auto-resize').addEventListener('change', saveSettings);
   document.getElementById('btn-export').addEventListener('click', exportConfig);
   document.getElementById('btn-import').addEventListener('click', importConfig);
 
@@ -317,6 +319,14 @@ function setupEventListeners() {
   document.getElementById('btn-delete-confirm').addEventListener('click', confirmDeleteApp);
   document.getElementById('btn-delete-all-instead').addEventListener('click', deleteAllInstead);
 
+  // Logs modal
+  document.getElementById('logs-close').addEventListener('click', closeLogs);
+  document.getElementById('logs-refresh').addEventListener('click', refreshLogs);
+  document.getElementById('logs-copy').addEventListener('click', copyLogs);
+  document.getElementById('modal-logs').addEventListener('click', (e) => {
+    if (e.target.id === 'modal-logs') closeLogs();
+  });
+
   // Theme selector
   document.querySelectorAll('.theme-btn').forEach(btn => {
     btn.addEventListener('click', () => setTheme(btn.dataset.theme));
@@ -330,6 +340,7 @@ function setupEventListeners() {
         closeGroupModal();
         closeDeleteConfirm();
         closeSettings();
+        closeLogs();
         document.getElementById('modal-discoveries').classList.add('hidden');
       }
       if (e.key === 'Enter' && e.target.id === 'group-name-input') {
@@ -621,10 +632,12 @@ async function loadApps() {
     renderPorts();
     updateAppsCount();
 
-    try {
-      await window.portpilot.window.autoResize(state.apps.length);
-    } catch (resizeError) {
-      console.log('Window auto-resize skipped:', resizeError.message);
+    if (state.settings.autoResizeWindow) {
+      try {
+        await window.portpilot.window.autoResize(state.apps.length);
+      } catch (resizeError) {
+        console.log('Window auto-resize skipped:', resizeError.message);
+      }
     }
   } catch (error) {
     showToast('Failed to load apps: ' + error.message, 'error');
@@ -855,6 +868,7 @@ function renderAppCard(app) {
   } else if (isRunning || starting) {
     actionsHtml = `
       <button class="btn btn-small btn-secondary" onclick="event.stopPropagation(); openInBrowser('${app.id}')" title="Open" ${starting ? 'disabled' : ''}>${icon('browser', 12)}</button>
+      ${managedRunning ? `<button class="btn btn-small btn-secondary" onclick="event.stopPropagation(); viewLogs('${app.id}')" title="View logs">${icon('logs', 12)}</button>` : ''}
       <button class="btn btn-small btn-danger" onclick="event.stopPropagation(); stopApp('${app.id}')" title="Stop" ${starting ? 'disabled' : ''}>${icon('stop', 12)}</button>`;
   } else {
     actionsHtml = `<button class="btn btn-small btn-success" onclick="event.stopPropagation(); startApp('${app.id}')" title="Start">${icon('play', 12)}</button>`;
@@ -864,17 +878,24 @@ function renderAppCard(app) {
     <div class="app-card ${isSelected ? 'selected' : ''} ${isExpanded ? 'expanded' : ''}"
          data-id="${app.id}"
          draggable="true"
+         tabindex="0"
+         role="button"
+         aria-expanded="${isExpanded}"
+         aria-label="${escapeHtml(app.name)} — press Enter to ${isExpanded ? 'collapse' : 'expand'} details"
          ondragstart="handleDragStart(event, '${app.id}')"
          ondragover="handleDragOver(event)"
          ondragenter="handleDragEnter(event)"
          ondragleave="handleDragLeave(event)"
          ondrop="handleDrop(event, '${app.id}')"
          ondragend="handleDragEnd(event)"
+         onkeydown="handleCardKeydown(event, '${app.id}')"
          onclick="if (event.target.closest('.app-checkbox, .btn-star, .app-actions, .app-actions-visible, .drag-handle, button, .req-badge')) return; toggleAppExpansion('${app.id}')">
-      <span class="drag-handle" title="Drag to reorder">${icon('grip', 14)}</span>
+      <span class="drag-handle" title="Drag to reorder" aria-hidden="true">${icon('grip', 14)}</span>
       <input type="checkbox" class="app-checkbox"
              ${isSelected ? 'checked' : ''}
+             onclick="event.stopPropagation()"
              onchange="event.stopPropagation(); toggleAppSelection('${app.id}')"
+             aria-label="Select ${escapeHtml(app.name)}"
              title="Select">
       <span class="status-dot ${statusClass}"></span>
       <div class="app-name-area">
@@ -1189,6 +1210,16 @@ function toggleAppExpansion(appId) {
     state.expandedApps.add(appId);
   }
   renderApps();
+}
+
+// Keyboard activation for app cards (Enter/Space toggles details), but only when
+// the card itself is focused - never when focus is on a child control.
+function handleCardKeydown(event, appId) {
+  if (event.target !== event.currentTarget) return;
+  if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
+    event.preventDefault();
+    toggleAppExpansion(appId);
+  }
 }
 
 function expandAllApps() {
@@ -1747,6 +1778,7 @@ async function loadSettings() {
     document.getElementById('setting-devtools').checked = state.settings.openDevTools === true;
     document.getElementById('setting-close-to-tray').checked = state.settings.closeToTray !== false;
     document.getElementById('setting-stop-apps-on-quit').checked = state.settings.stopAppsOnQuit !== false;
+    document.getElementById('setting-auto-resize').checked = state.settings.autoResizeWindow === true;
     state.favoritesExpanded = result.settings.favoritesExpanded !== false;
     state.otherProjectsExpanded = result.settings.otherProjectsExpanded !== false;
   }
@@ -1759,7 +1791,8 @@ async function saveSettings() {
     scanInterval: parseInt(document.getElementById('setting-interval').value) * 1000,
     openDevTools: document.getElementById('setting-devtools').checked,
     closeToTray: document.getElementById('setting-close-to-tray').checked,
-    stopAppsOnQuit: document.getElementById('setting-stop-apps-on-quit').checked
+    stopAppsOnQuit: document.getElementById('setting-stop-apps-on-quit').checked,
+    autoResizeWindow: document.getElementById('setting-auto-resize').checked
   };
   await window.portpilot.config.updateSettings(settings);
   state.settings = settings;
@@ -1828,6 +1861,59 @@ function setTheme(themeName, showNotification = true) {
   }
 }
 
+// ============ Logs Viewer ============
+let _logsAppId = null;
+let _logsTimer = null;
+
+async function viewLogs(appId) {
+  _logsAppId = appId;
+  const app = state.apps.find(a => a.id === appId);
+  document.getElementById('logs-app-name').textContent = app ? app.name : 'App';
+  document.getElementById('modal-logs').classList.remove('hidden');
+  await refreshLogs();
+  if (_logsTimer) clearInterval(_logsTimer);
+  _logsTimer = setInterval(refreshLogs, 2000);   // stream while running
+}
+
+async function refreshLogs() {
+  if (!_logsAppId) return;
+  const out = document.getElementById('logs-stdout');
+  const err = document.getElementById('logs-stderr');
+  const errSection = document.getElementById('logs-stderr-section');
+  try {
+    const result = await window.portpilot.process.logs(_logsAppId);
+    if (result.success) {
+      const autoscroll = document.getElementById('logs-autoscroll')?.checked !== false;
+      out.textContent = result.stdout && result.stdout.trim() ? result.stdout : '(no stdout yet)';
+      err.textContent = result.stderr || '';
+      errSection.style.display = (result.stderr && result.stderr.trim()) ? '' : 'none';
+      if (autoscroll) {
+        out.scrollTop = out.scrollHeight;
+        err.scrollTop = err.scrollHeight;
+      }
+    } else {
+      out.textContent = 'No logs available - this app was not started by PortPilot, or it has exited.';
+      errSection.style.display = 'none';
+    }
+  } catch (e) {
+    out.textContent = 'Failed to read logs: ' + e.message;
+  }
+}
+
+function closeLogs() {
+  document.getElementById('modal-logs').classList.add('hidden');
+  if (_logsTimer) { clearInterval(_logsTimer); _logsTimer = null; }
+  _logsAppId = null;
+}
+
+function copyLogs() {
+  const out = document.getElementById('logs-stdout').textContent;
+  const err = document.getElementById('logs-stderr').textContent;
+  const text = [out, (err && err.trim()) ? '\n--- stderr ---\n' + err : ''].join('');
+  navigator.clipboard.writeText(text);
+  showToast('Logs copied', 'success');
+}
+
 // ============ Utilities ============
 function showToast(message, type = 'success') {
   const existing = dom.toastContainer.querySelectorAll('.toast');
@@ -1892,6 +1978,7 @@ window.moveSelectedToGroup = moveSelectedToGroup;
 window.expandAllApps = expandAllApps;
 window.collapseAllApps = collapseAllApps;
 window.toggleAppExpansion = toggleAppExpansion;
+window.handleCardKeydown = handleCardKeydown;
 window.toggleGroup = toggleGroup;
 window.handleDragStart = handleDragStart;
 window.handleDragOver = handleDragOver;
@@ -1900,3 +1987,7 @@ window.handleDragLeave = handleDragLeave;
 window.handleDrop = handleDrop;
 window.handleDragEnd = handleDragEnd;
 window.openProcessFolder = openProcessFolder;
+window.viewLogs = viewLogs;
+window.closeLogs = closeLogs;
+window.copyLogs = copyLogs;
+window.refreshLogs = refreshLogs;
