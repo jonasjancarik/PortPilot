@@ -58,8 +58,8 @@ export class AppsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
 
   private activePorts: ActivePort[] = [];
 
-  refresh(): void {
-    this.activePorts = scanPorts();
+  async refresh(): Promise<void> {
+    this.activePorts = await scanPorts();
     this._onDidChangeTreeData.fire(undefined);
   }
 

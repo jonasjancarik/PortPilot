@@ -59,8 +59,8 @@ class PortsTreeProvider {
     _onDidChangeTreeData = new vscode.EventEmitter();
     onDidChangeTreeData = this._onDidChangeTreeData.event;
     cachedPorts = [];
-    refresh() {
-        this.cachedPorts = (0, portScanner_1.scanPorts)();
+    async refresh() {
+        this.cachedPorts = await (0, portScanner_1.scanPorts)();
         this._onDidChangeTreeData.fire(undefined);
     }
     getCachedPorts() {
@@ -70,9 +70,7 @@ class PortsTreeProvider {
         return element;
     }
     getChildren() {
-        if (!this.cachedPorts.length) {
-            this.cachedPorts = (0, portScanner_1.scanPorts)();
-        }
+        // Render from cache only; scanning is async and driven by refresh().
         const config = (0, config_1.readConfig)();
         const appByPort = new Map(config.apps
             .filter(a => a.preferredPort)

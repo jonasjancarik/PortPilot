@@ -53,7 +53,7 @@ contextBridge.exposeInMainWorld('portpilot', {
 
   // Event listeners
   on: (channel, callback) => {
-    const validChannels = ['trigger-scan', 'config-changed'];
+    const validChannels = ['trigger-scan', 'config-changed', 'toast'];
     if (validChannels.includes(channel)) {
       ipcRenderer.on(channel, (_, ...args) => callback(...args));
     }

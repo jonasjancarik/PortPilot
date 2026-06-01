@@ -25,16 +25,63 @@ async function getProcessDetails(pid, port) {
   }
 }
 
-/** Windows process details */
+/** Windows process details. PID is validated as an integer by the caller. */
 function getProcessDetailsWindows(pid, port) {
+  // Count connections for this pid+port (JS filter, locale-independent).
+  const getConnections = () => new Promise((resolve) => {
+    exec('netstat -ano', { encoding: 'utf8' }, (connError, connStdout) => {
+      let connections = 0;
+      if (!connError && connStdout) {
+        const portStr = `:${port}`;
+        const pidStr = `${pid}`;
+        connections = connStdout.trim().split('\n')
+          .filter(l => l.includes(portStr) && l.includes(pidStr)).length;
+      }
+      resolve(connections);
+    });
+  });
+
   return new Promise((resolve) => {
-    // Get memory and uptime
+    // Compute memory + uptime via PowerShell/CIM (wmic is deprecated on modern
+    // Windows). Uptime is computed in-process to avoid date-format parsing.
+    const psCmd =
+      `powershell -NoProfile -NonInteractive -Command ` +
+      `"$p = Get-CimInstance Win32_Process -Filter 'ProcessId=${pid}'; ` +
+      `if ($p) { [PSCustomObject]@{ WorkingSetSize = $p.WorkingSetSize; ` +
+      `UptimeSeconds = [int]((Get-Date) - $p.CreationDate).TotalSeconds } | ConvertTo-Json -Compress }"`;
+
+    exec(psCmd, { encoding: 'utf8', timeout: 10000, windowsHide: true }, async (error, stdout) => {
+      let memory = null;
+      let uptime = null;
+
+      if (!error && stdout && stdout.trim()) {
+        try {
+          const d = JSON.parse(stdout);
+          if (d.WorkingSetSize) memory = Math.round(d.WorkingSetSize / 1024 / 1024);
+          if (Number.isFinite(d.UptimeSeconds)) uptime = d.UptimeSeconds;
+        } catch { /* fall through to wmic */ }
+      }
+
+      if (memory === null && uptime === null) {
+        const wmic = await getProcessDetailsWindowsWmic(pid);
+        memory = wmic.memory;
+        uptime = wmic.uptime;
+      }
+
+      const connections = await getConnections();
+      resolve({ memory, uptime, connections });
+    });
+  });
+}
+
+/** Legacy wmic fallback for memory/uptime (older Windows without PowerShell/CIM). */
+function getProcessDetailsWindowsWmic(pid) {
+  return new Promise((resolve) => {
     exec(`wmic process where "ProcessId=${pid}" get WorkingSetSize,CreationDate /format:csv`,
       { encoding: 'utf8' },
       (error, stdout) => {
         let memory = null;
         let uptime = null;
-
         if (!error && stdout) {
           const lines = stdout.trim().split('\n').slice(1);
           for (const line of lines) {
@@ -42,40 +89,23 @@ function getProcessDetailsWindows(pid, port) {
             if (parts.length >= 3) {
               const creationDate = parts[1]?.trim();
               const workingSet = parseInt(parts[2]?.trim(), 10);
-
-              if (workingSet) {
-                memory = Math.round(workingSet / 1024 / 1024); // Convert to MB
-              }
-
+              if (workingSet) memory = Math.round(workingSet / 1024 / 1024);
               if (creationDate) {
                 // WMIC format: YYYYMMDDHHMMss.mmmmmm+zzz
-                const year = parseInt(creationDate.substring(0, 4), 10);
-                const month = parseInt(creationDate.substring(4, 6), 10) - 1;
-                const day = parseInt(creationDate.substring(6, 8), 10);
-                const hour = parseInt(creationDate.substring(8, 10), 10);
-                const minute = parseInt(creationDate.substring(10, 12), 10);
-                const second = parseInt(creationDate.substring(12, 14), 10);
-
-                const startTime = new Date(year, month, day, hour, minute, second);
-                uptime = Math.floor((Date.now() - startTime.getTime()) / 1000); // seconds
+                const startTime = new Date(
+                  parseInt(creationDate.substring(0, 4), 10),
+                  parseInt(creationDate.substring(4, 6), 10) - 1,
+                  parseInt(creationDate.substring(6, 8), 10),
+                  parseInt(creationDate.substring(8, 10), 10),
+                  parseInt(creationDate.substring(10, 12), 10),
+                  parseInt(creationDate.substring(12, 14), 10)
+                );
+                uptime = Math.floor((Date.now() - startTime.getTime()) / 1000);
               }
             }
           }
         }
-
-        // Get connection count - filter in JS to avoid findstr locale/encoding issues
-        exec('netstat -ano', { encoding: 'utf8' },
-          (connError, connStdout) => {
-            let connections = 0;
-            if (!connError && connStdout) {
-              const portStr = `:${port}`;
-              const pidStr = `${pid}`;
-              connections = connStdout.trim().split('\n')
-                .filter(l => l.includes(portStr) && l.includes(pidStr)).length;
-            }
-            resolve({ memory, uptime, connections });
-          }
-        );
+        resolve({ memory, uptime });
       }
     );
   });

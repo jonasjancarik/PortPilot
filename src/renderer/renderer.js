@@ -111,6 +111,27 @@ function startPortReadinessCheck(appId, port, maxDelay) {
   };
 }
 
+// ============ Auto-Scan ============
+// Periodically refresh ports + running-app status so the list stays live while
+// juggling several localhost apps. Driven by the (previously inert) autoScan /
+// scanInterval settings. Skips work while the window is hidden (tray) to save CPU.
+let _autoScanTimer = null;
+function setupAutoScan() {
+  if (_autoScanTimer) {
+    clearInterval(_autoScanTimer);
+    _autoScanTimer = null;
+  }
+  if (state.settings.autoScan === false) return;
+
+  const seconds = Math.max(1, Math.round((state.settings.scanInterval || 5000) / 1000));
+  _autoScanTimer = setInterval(() => {
+    if (document.hidden) return;            // window minimised / in tray
+    if (state.settingsOpen) return;          // don't churn while editing settings
+    if (Object.keys(state.startingApps).length > 0) return; // a startup countdown owns refresh
+    loadApps();                              // silent refresh (no toast)
+  }, seconds * 1000);
+}
+
 async function checkDockerStatus() {
   try {
     const result = await window.portpilot.docker.status();
@@ -176,7 +197,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     await scanPorts();
   }
 
+  setupAutoScan();
+
   window.portpilot.on('trigger-scan', scanPorts);
+  window.portpilot.on('toast', (payload) => {
+    if (payload && payload.message) showToast(payload.message, payload.type || 'info');
+    loadApps();   // reflect tray-initiated changes (e.g. "Stop All Apps")
+  });
   window.portpilot.on('config-changed', async (data) => {
     console.log('[Renderer] Config changed externally, refreshing apps list...');
     await loadApps();
@@ -1736,6 +1763,7 @@ async function saveSettings() {
   };
   await window.portpilot.config.updateSettings(settings);
   state.settings = settings;
+  setupAutoScan();   // apply new autoScan / scanInterval immediately
   showToast('Settings saved', 'success');
 }
 

@@ -68,13 +68,14 @@ function activate(context) {
     watcher.onDidChange(() => refreshAll());
     watcher.onDidCreate(() => refreshAll());
     context.subscriptions.push(watcher);
-    function refreshAll() {
-        portsProvider.refresh();
+    async function refreshAll() {
+        // Single async scan shared with both providers (no UI-thread blocking).
+        await portsProvider.refresh();
         appsProvider.setActivePorts(portsProvider.getCachedPorts());
         updateStatusBar();
     }
     // Auto-refresh every 10 seconds
-    const interval = setInterval(() => refreshAll(), 10000);
+    const interval = setInterval(() => { void refreshAll(); }, 10000);
     context.subscriptions.push({ dispose: () => clearInterval(interval) });
     // Initial load
     refreshAll();
@@ -124,12 +125,12 @@ function activate(context) {
         });
     }), vscode.commands.registerCommand('portpilot.killPort', (item) => {
         const port = item.activePort.port;
-        vscode.window.showWarningMessage(`Kill process on port ${port} (${item.activePort.processName})?`, 'Kill', 'Cancel').then(choice => {
+        vscode.window.showWarningMessage(`Kill process on port ${port} (${item.activePort.processName})?`, 'Kill', 'Cancel').then(async (choice) => {
             if (choice !== 'Kill')
                 return;
-            if ((0, portScanner_1.killPort)(port)) {
+            if (await (0, portScanner_1.killPort)(port)) {
                 vscode.window.showInformationMessage(`Killed process on port ${port}`);
-                setTimeout(() => refreshAll(), 1000);
+                setTimeout(() => { void refreshAll(); }, 1000);
             }
             else {
                 vscode.window.showErrorMessage(`Failed to kill port ${port}`);

@@ -7,7 +7,7 @@
 **[MCP Integration Setup](mcp-server/README.md)**
 
 [![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/m4cd4r4/PortPilot/releases/tag/v2.0.0)
-[![Tests](https://img.shields.io/badge/tests-36%2F36%20passing-brightgreen.svg)](TESTING_SUMMARY.md)
+[![Tests](https://img.shields.io/badge/tests-Playwright%20E2E-blue.svg)](tests/)
 [![Licence](https://img.shields.io/badge/licence-MIT-green.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-enabled-purple.svg)](mcp-server/README.md)
 
@@ -57,7 +57,7 @@ Control PortPilot with natural language! Works with Claude Code, Cursor, Windsur
 - **Knowledge tab removed** - documentation moved to the GitHub wiki
 - **All emoji replaced** with crisp SVG icons (21 inline SVGs)
 - **Glassmorphism card design** with backdrop-filter blur
-- **New "Glass" theme added** (7 themes total)
+- **New "Glass" theme added** (6 themes total)
 - **Global search bar** filters both apps and ports simultaneously
 - **App cards show running status inline** (memory, uptime, PID)
 
@@ -114,7 +114,7 @@ Control PortPilot with natural language! Works with Claude Code, Cursor, Windsur
 - **IPv4/IPv6 Awareness** - Shows which protocol your app is bound to
 - **System Tray** - Minimize to tray, "Stop All Apps" menu option, configurable window behaviour
 - **Single-Instance Lock** - Only one PortPilot runs at a time, focuses existing window
-- **Multi-Theme Support** - 7 themes including TokyoNight, Brutalist, Nord, Dracula, Glass
+- **Multi-Theme Support** - 6 themes including TokyoNight, Brutalist Dark, Nord, Dracula, Glass
 - **VS Code Extension** - Status bar counter, collapsible groups, full CRUD from the sidebar
 - **MCP v2.0 with 18 tools** - Manage your entire dev environment via any MCP-compatible AI assistant
 
@@ -322,8 +322,8 @@ Explore all PortPilot features including app management, the Active Ports scanne
 - [PortPilot-2.0.0-portable.exe](https://github.com/m4cd4r4/PortPilot/releases/download/v2.0.0/PortPilot-2.0.0-portable.exe) - Portable (~72 MB)
 
 **Linux:**
-- [PortPilot-2.0.0-x86_64.AppImage](https://github.com/m4cd4r4/PortPilot/releases/download/v2.0.0/PortPilot-2.0.0-x86_64.AppImage) - Universal Linux (~98 MB)
-- [PortPilot-2.0.0-amd64.deb](https://github.com/m4cd4r4/PortPilot/releases/download/v2.0.0/PortPilot-2.0.0-amd64.deb) - Debian/Ubuntu (~69 MB)
+- The v2.0.0 release currently ships Windows installers only. Build the Linux
+  AppImage/.deb from source with `npm run build:linux` (see [Build from Source](#build-from-source)).
 
 **macOS:**
 - Build from source (see below) - macOS is supported but not officially tested
@@ -425,7 +425,6 @@ This ensures the browser button opens the correct URL.
 |-------|-------------|
 | **TokyoNight** | Dark blue with cyan/magenta accents (default) |
 | **Brutalist Dark** | Pure black, yellow/cyan, monospace |
-| **Brutalist Light** | White with black borders, yellow highlights |
 | **Nord** | Cool arctic blues |
 | **Dracula** | Purple/pink dark theme |
 | **Solarized Light** | Warm, easy on the eyes |
@@ -496,39 +495,25 @@ npm run build:all
 
 ## Testing
 
-PortPilot includes a comprehensive Playwright E2E test suite with **100% test coverage**.
+PortPilot uses a Playwright end-to-end smoke suite that drives the real Electron app.
 
 ```bash
-# Run all tests (36 tests)
-npm run test:all
-
-# Run core functionality tests (11 tests)
+# Run the E2E smoke suite (launches Electron + test servers on 3000/3001/8080)
 npm test
 
-# Run groups tests (8 tests)
-npm run test:groups
-
-# Run v1.7.0 feature tests (17 tests)
-npm run test:v1.7
+# On headless Linux, run under a virtual display
+xvfb-run -a npm test
 
 # Generate UI screenshots
 npm run screenshots
 ```
 
-**Test Coverage:**
-- ✅ UI rendering and navigation (100%)
-- ✅ Port scanning functionality (100%)
-- ✅ Port filtering (100%)
-- ✅ Port killing (100%)
-- ✅ Process cleanup (100%)
-- ✅ Settings persistence (100%)
-- ✅ App search, sort, and filter (100%)
-- ✅ Group colours and management (100%)
-- ✅ Quick Add wizard (100%)
-- ✅ Keyboard shortcuts (100%)
-- ✅ Header running summary (100%)
+**Covered:** window launch, port scanning, test-server detection, port-card rendering,
+global search filtering, copy/kill controls, the Settings panel, and the Add App modal.
 
-**Total: 36/36 tests passing** - See [TESTING_SUMMARY.md](TESTING_SUMMARY.md) for details.
+> The older `v1.3`/`v1.7`/`groups` feature specs targeted the pre-v2.0 tab UI and are
+> kept for reference only; they need rewriting against the single-pane layout before
+> being re-enabled in `test:all`.
 
 ## ✨ AI Agent Integration (MCP)
 
@@ -616,7 +601,7 @@ See [mcp-server/README.md](mcp-server/README.md) for full documentation.
 - Knowledge tab removed (docs moved to GitHub wiki)
 - 21 inline SVG icons replace all emoji
 - Glassmorphism card design with backdrop-filter blur
-- New Glass theme (7 themes total)
+- New Glass theme (6 themes total)
 - Global search bar filters apps and ports simultaneously
 - MCP Server v2.0 - rewritten with McpServer API and Zod schemas on SDK 1.29.0
 - 6 new MCP tools (18 total): get_status, check_port, bulk_start, bulk_stop, list_groups, move_to_group

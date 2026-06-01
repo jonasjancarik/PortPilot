@@ -88,8 +88,8 @@ class AppsTreeProvider {
     _onDidChangeTreeData = new vscode.EventEmitter();
     onDidChangeTreeData = this._onDidChangeTreeData.event;
     activePorts = [];
-    refresh() {
-        this.activePorts = (0, portScanner_1.scanPorts)();
+    async refresh() {
+        this.activePorts = await (0, portScanner_1.scanPorts)();
         this._onDidChangeTreeData.fire(undefined);
     }
     setActivePorts(ports) {

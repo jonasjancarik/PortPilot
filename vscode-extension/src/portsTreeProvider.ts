@@ -27,8 +27,8 @@ export class PortsTreeProvider implements vscode.TreeDataProvider<PortTreeItem> 
 
   private cachedPorts: ActivePort[] = [];
 
-  refresh(): void {
-    this.cachedPorts = scanPorts();
+  async refresh(): Promise<void> {
+    this.cachedPorts = await scanPorts();
     this._onDidChangeTreeData.fire(undefined);
   }
 
@@ -41,10 +41,7 @@ export class PortsTreeProvider implements vscode.TreeDataProvider<PortTreeItem> 
   }
 
   getChildren(): PortTreeItem[] {
-    if (!this.cachedPorts.length) {
-      this.cachedPorts = scanPorts();
-    }
-
+    // Render from cache only; scanning is async and driven by refresh().
     const config = readConfig();
     const appByPort = new Map(
       config.apps

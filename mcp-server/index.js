@@ -21,12 +21,16 @@ import os from 'os';
 function getConfigPath() {
   const platform = os.platform();
   let configDir;
+  // NOTE: must match Electron's app.getPath('userData'), which is derived from
+  // the lowercase package.json "name" ("portpilot"). Using "PortPilot" (capital)
+  // here works on case-insensitive Windows but reads a DIFFERENT file on
+  // Linux/macOS, so the MCP server would never see the desktop app's config.
   if (platform === 'win32') {
-    configDir = path.join(process.env.APPDATA || '', 'PortPilot');
+    configDir = path.join(process.env.APPDATA || '', 'portpilot');
   } else if (platform === 'darwin') {
-    configDir = path.join(os.homedir(), 'Library', 'Application Support', 'PortPilot');
+    configDir = path.join(os.homedir(), 'Library', 'Application Support', 'portpilot');
   } else {
-    configDir = path.join(os.homedir(), '.config', 'PortPilot');
+    configDir = path.join(os.homedir(), '.config', 'portpilot');
   }
   return path.join(configDir, 'portpilot-config.json');
 }
@@ -57,37 +61,52 @@ function generateId() {
 // PORT SCANNING
 // =============================================================================
 
+function getProcessNamesWindows(pids) {
+  // Single batched PID -> image-name lookup. Replaces a per-PID `wmic` spawn
+  // (slow, and `wmic` is deprecated/removed on recent Windows 11). `tasklist`
+  // image names are locale-independent.
+  const map = new Map();
+  if (pids.length === 0) return map;
+  try {
+    const out = execSync('tasklist /fo csv /nh', { encoding: 'utf-8', timeout: 10000, maxBuffer: 8 * 1024 * 1024 });
+    const wanted = new Set(pids);
+    for (const line of out.split('\n')) {
+      const cols = line.split('","').map(c => c.replace(/^"|"$/g, '').trim());
+      if (cols.length < 2) continue;
+      const pid = parseInt(cols[1], 10);
+      if (wanted.has(pid)) map.set(pid, cols[0]);
+    }
+  } catch { /* names stay Unknown */ }
+  return map;
+}
+
 function scanPorts() {
   const platform = os.platform();
   const ports = [];
 
   try {
     if (platform === 'win32') {
-      const output = execSync('netstat -ano', { encoding: 'utf-8', timeout: 15000 });
+      const output = execSync('netstat -ano', { encoding: 'utf-8', timeout: 15000, maxBuffer: 8 * 1024 * 1024 });
       const lines = output.split('\n').filter(l => /^\s*TCP\b/i.test(l));
 
+      const portToPid = new Map();
       for (const line of lines) {
         const parts = line.trim().split(/\s+/);
         if (parts.length < 5) continue;
-        const localPart = parts[1];
         const foreignPart = parts[2];
-        const pid = parseInt(parts[4], 10);
         if (!foreignPart || !foreignPart.match(/:0$/)) continue;
-        const portMatch = localPart.match(/:(\d+)$/);
+        const portMatch = parts[1].match(/:(\d+)$/);
         if (!portMatch) continue;
         const port = parseInt(portMatch[1]);
-        if (port >= 1024 && port <= 65535) {
-          let processName = 'Unknown';
-          try {
-            const wmicOutput = execSync(
-              `wmic process where ProcessId=${pid} get Name /value`,
-              { encoding: 'utf-8', timeout: 5000 }
-            );
-            const nameMatch = wmicOutput.match(/Name=(.+)/);
-            if (nameMatch) processName = nameMatch[1].trim();
-          } catch { /* ignore */ }
-          ports.push({ port, pid, processName });
+        const pid = parseInt(parts[4], 10);
+        if (port >= 1 && port <= 65535 && !portToPid.has(port)) {
+          portToPid.set(port, pid);
         }
+      }
+
+      const names = getProcessNamesWindows([...new Set(portToPid.values())]);
+      for (const [port, pid] of portToPid) {
+        ports.push({ port, pid, processName: names.get(pid) || 'Unknown' });
       }
     } else if (platform === 'darwin') {
       const output = execSync('lsof -iTCP -sTCP:LISTEN -n -P', { encoding: 'utf-8', timeout: 10000 });
@@ -128,12 +147,12 @@ function killPort(port) {
   const platform = os.platform();
   try {
     if (platform === 'win32') {
-      const output = execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf-8' });
-      const match = output.match(/LISTENING\s+(\d+)/);
-      if (match) {
-        execSync(`taskkill /F /PID ${match[1]}`);
-        return { success: true, pid: parseInt(match[1]) };
-      }
+      // Resolve the PID via the locale-independent scan rather than
+      // `findstr LISTENING`, which fails on non-English Windows.
+      const match = scanPorts().find(p => p.port === port);
+      if (!match || !match.pid) return { success: false, error: 'Port not found' };
+      execSync(`taskkill /F /PID ${match.pid}`);
+      return { success: true, pid: match.pid };
     } else {
       execSync(`lsof -ti:${port} | xargs kill -9`);
       return { success: true };
@@ -141,7 +160,6 @@ function killPort(port) {
   } catch (error) {
     return { success: false, error: error.message };
   }
-  return { success: false, error: 'Port not found' };
 }
 
 // =============================================================================

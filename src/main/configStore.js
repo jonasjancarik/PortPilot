@@ -136,20 +136,29 @@ class ConfigStore {
     }
 
     const existingIndex = this.config.apps.findIndex(a => a.id === appConfig.id);
-    
+    const existing = existingIndex >= 0 ? this.config.apps[existingIndex] : {};
+
+    // Merge onto the existing record so fields the caller didn't supply
+    // (e.g. `description` from an MCP-added app, `startupDelay`) are preserved.
+    // Previously this rebuilt a fixed-shape object, silently dropping any field
+    // not in the list - so starring or editing an app destroyed its description.
+    const has = (key) => Object.prototype.hasOwnProperty.call(appConfig, key);
     const app = {
+      ...existing,
       id: appConfig.id,
       name: appConfig.name,
       command: appConfig.command,
-      cwd: appConfig.cwd || '',
-      preferredPort: appConfig.preferredPort || null,
-      fallbackRange: appConfig.fallbackRange || null,
-      env: appConfig.env || {},
-      autoStart: appConfig.autoStart || false,
-      isFavorite: appConfig.isFavorite || false,
-      group: appConfig.group || null,
-      color: appConfig.color || this.getRandomColor(),
-      createdAt: appConfig.createdAt || new Date().toISOString(),
+      cwd: has('cwd') ? (appConfig.cwd || '') : (existing.cwd || ''),
+      preferredPort: has('preferredPort') ? (appConfig.preferredPort || null) : (existing.preferredPort || null),
+      fallbackRange: has('fallbackRange') ? (appConfig.fallbackRange || null) : (existing.fallbackRange || null),
+      env: has('env') ? (appConfig.env || {}) : (existing.env || {}),
+      autoStart: has('autoStart') ? !!appConfig.autoStart : !!existing.autoStart,
+      isFavorite: has('isFavorite') ? !!appConfig.isFavorite : !!existing.isFavorite,
+      group: has('group') ? (appConfig.group || null) : (existing.group || null),
+      description: has('description') ? (appConfig.description || null) : (existing.description || null),
+      startupDelay: has('startupDelay') ? appConfig.startupDelay : (existing.startupDelay ?? null),
+      color: appConfig.color || existing.color || this.getRandomColor(),
+      createdAt: existing.createdAt || appConfig.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
