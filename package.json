@@ -16,6 +16,7 @@
   "scripts": {
     "start": "node scripts/launch.js",
     "dev": "node scripts/launch.js --dev",
+    "agent": "node src/agent/server.js",
     "test": "node tests/run-comprehensive.js",
     "test:all": "node tests/run-comprehensive.js",
     "_comment_legacy_tests": "v1.3/v1.7/groups specs target the pre-v2.0 tab UI and need rewriting before re-enabling",

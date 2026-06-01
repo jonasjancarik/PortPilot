@@ -1,16 +1,15 @@
 const fs = require('fs');
 const path = require('path');
-const { app } = require('electron');
+const { getConfigPath } = require('../core/configPath');
 
 /**
  * ConfigStore - Manages persistent app configurations
  */
 class ConfigStore {
-  constructor(mainWindow = null) {
-    this.configPath = path.join(
-      app?.getPath('userData') || path.join(process.cwd(), 'data'),
-      'portpilot-config.json'
-    );
+  constructor(mainWindow = null, configPathOverride = null) {
+    // Resolve via the shared helper so the desktop app, MCP server and web agent
+    // all land on the same file (works with or without Electron).
+    this.configPath = configPathOverride || getConfigPath();
     this.config = this.load();
     this.mainWindow = mainWindow;
     this.watchConfigFile();

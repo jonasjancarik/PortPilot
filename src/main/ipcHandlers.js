@@ -803,4 +803,4 @@ function setupIpcHandlers(ipcMain, configStore) {
   });
 }
 
-module.exports = { setupIpcHandlers };
+module.exports = { setupIpcHandlers, matchPortsToApps, getProcessDetails };

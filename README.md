@@ -584,6 +584,30 @@ Just ask in natural language:
 
 See [mcp-server/README.md](mcp-server/README.md) for full documentation.
 
+## Web Agent (v3 preview)
+
+PortPilot can also run as a **local web app** — the same UI in your browser,
+backed by a hardened loopback agent. This is an experimental preview.
+
+```bash
+npm run agent
+# →  http://127.0.0.1:7317/
+```
+
+The agent runs the same backend as the desktop app and reuses the same UI, so
+you get PortPilot in a browser tab without Electron. Because the backend can
+start/kill processes, it is locked down with several independent controls:
+
+- Binds to **`127.0.0.1` only** (never reachable off your machine)
+- A **per-session token** is required on every API call
+- **Host-header** validation (defeats DNS-rebinding) and **Origin/CORS** lockdown
+- A custom header forces a **CORS preflight**, blocking cross-site requests
+- Strict **CSP**; token file written `chmod 600`
+
+See **[SECURITY.md](SECURITY.md)** for the full threat model and verified
+behaviour. Run **either** the desktop app or the agent at a time (they track
+started processes separately).
+
 ## Tech Stack
 
 - **Electron 27** - Cross-platform desktop framework
