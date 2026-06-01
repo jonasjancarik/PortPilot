@@ -239,8 +239,85 @@ function setupIcons() {
   });
 }
 
+// ============ Event Delegation ============
+// All UI actions use data-act / data-change attributes routed through delegated
+// listeners (instead of inline on* handlers). This lets the CSP forbid inline
+// scripts (script-src 'self'), removing the main XSS->code-exec vector.
+function setupDelegation() {
+  const CLICK = {
+    copyCmdPath: el => copyCmdPath(el.dataset.cmd),
+    openPortInBrowser: el => openPortInBrowser(+el.dataset.port),
+    openProcessFolder: el => openProcessFolder(el.dataset.path),
+    copyPort: el => copyPort(+el.dataset.port),
+    killPort: el => killPort(+el.dataset.port),
+    toggleSection: el => toggleSection(el.dataset.section),
+    toggleGroup: el => toggleGroup(el.dataset.group),
+    openRenameGroupModal: el => openRenameGroupModal(el.dataset.group),
+    confirmDeleteGroup: el => confirmDeleteGroup(el.dataset.group),
+    startDocker: () => startDocker(),
+    killConflictingProcess: el => killConflictingProcess(el.dataset.id),
+    startApp: el => startApp(el.dataset.id),
+    openInBrowser: el => openInBrowser(el.dataset.id),
+    viewLogs: el => viewLogs(el.dataset.id),
+    stopApp: el => stopApp(el.dataset.id),
+    toggleFavorite: el => toggleFavorite(el.dataset.id),
+    openAppFolder: el => openAppFolder(el.dataset.id),
+    editApp: el => editApp(el.dataset.id),
+    deleteApp: el => deleteApp(el.dataset.id),
+    removeScanPath: el => removeScanPath(el.dataset.path),
+    addDiscoveredProject: el => addDiscoveredProject(+el.dataset.index),
+    selectGroupColor: el => selectGroupColor(el.dataset.color),
+    selectAllApps: () => selectAllApps(),
+    favoriteSelected: () => favoriteSelected(),
+    unfavoriteSelected: () => unfavoriteSelected(),
+    deleteSelected: () => deleteSelected(),
+    clearSelection: () => clearSelection(),
+    closeGroupModal: () => closeGroupModal(),
+    saveGroupModal: () => saveGroupModal()
+  };
+  const CHANGE = {
+    toggleAppSelection: el => toggleAppSelection(el.dataset.id),
+    toggleProjectSelection: el => toggleProjectSelection(+el.dataset.index),
+    moveSelectedToGroup: el => { moveSelectedToGroup(el.value); el.selectedIndex = 0; }
+  };
+
+  document.addEventListener('click', (e) => {
+    const actEl = e.target.closest('[data-act]');
+    if (actEl && CLICK[actEl.dataset.act]) {
+      CLICK[actEl.dataset.act](actEl, e);
+      return;
+    }
+    // Card expand: click anywhere on a card except an interactive control.
+    const card = e.target.closest('.app-card');
+    if (card && !e.target.closest('button, input, a, [data-act], .btn-star, .req-badge, .drag-handle')) {
+      toggleAppExpansion(card.dataset.id);
+    }
+  });
+
+  document.addEventListener('change', (e) => {
+    const el = e.target.closest('[data-change]');
+    if (el && CHANGE[el.dataset.change]) CHANGE[el.dataset.change](el, e);
+  });
+
+  // Keyboard activation for cards (separate from the global shortcut handler).
+  document.addEventListener('keydown', (e) => {
+    const card = e.target.closest('.app-card');
+    if (card && e.target === card) handleCardKeydown(e, card.dataset.id);
+  });
+
+  // Drag-and-drop reordering, delegated on the apps list.
+  const list = dom.appsList;
+  list.addEventListener('dragstart', handleDragStart);
+  list.addEventListener('dragover', handleDragOver);
+  list.addEventListener('dragenter', handleDragEnter);
+  list.addEventListener('dragleave', handleDragLeave);
+  list.addEventListener('drop', handleDrop);
+  list.addEventListener('dragend', handleDragEnd);
+}
+
 // ============ Event Listeners ============
 function setupEventListeners() {
+  setupDelegation();
   // Header
   document.getElementById('btn-scan').addEventListener('click', scanPorts);
   document.getElementById('btn-add-app').addEventListener('click', () => openAppModal());
@@ -490,23 +567,23 @@ function renderPorts() {
         ` : ''}
         <span class="port-pid">${p.pid || ''}</span>
         ${cmdLine ? `
-        <span class="port-cmd-icon" onclick="event.stopPropagation()" title="Command path">
+        <span class="port-cmd-icon" title="Command path">
           CMD
           <div class="cmd-tooltip">
             <div class="cmd-tooltip-header">
               <span class="cmd-tooltip-title">Command</span>
-              <button class="cmd-copy-btn" onclick="copyCmdPath('${escapeHtml(cmdLine.replace(/\\/g, '\\\\').replace(/'/g, "\\'"))}')">
+              <button class="cmd-copy-btn" data-act="copyCmdPath" data-cmd="${escapeHtml(cmdLine)}">
                 ${icon('copy', 10)} Copy
               </button>
             </div>
             <div class="cmd-tooltip-path">${escapeHtml(cmdLine)}</div>
           </div>
         </span>` : ''}
-        <div class="port-actions" onclick="event.stopPropagation()">
-          <button class="btn btn-small btn-secondary" onclick="openPortInBrowser(${p.port})" title="Open in browser">${icon('browser', 12)}</button>
-          ${exePath ? `<button class="btn btn-small btn-secondary" onclick="openProcessFolder('${escapeHtml(exePath.replace(/\\/g, '\\\\'))}')" title="Open folder">${icon('folder', 12)}</button>` : ''}
-          <button class="btn btn-small btn-secondary" onclick="copyPort(${p.port})" title="Copy localhost:${p.port}">${icon('copy', 12)}</button>
-          <button class="btn btn-small btn-danger" onclick="killPort(${p.port})" title="Kill process">${icon('kill', 12)}</button>
+        <div class="port-actions">
+          <button class="btn btn-small btn-secondary" data-act="openPortInBrowser" data-port="${p.port}" title="Open in browser">${icon('browser', 12)}</button>
+          ${exePath ? `<button class="btn btn-small btn-secondary" data-act="openProcessFolder" data-path="${escapeHtml(exePath)}" title="Open folder">${icon('folder', 12)}</button>` : ''}
+          <button class="btn btn-small btn-secondary" data-act="copyPort" data-port="${p.port}" title="Copy localhost:${p.port}">${icon('copy', 12)}</button>
+          <button class="btn btn-small btn-danger" data-act="killPort" data-port="${p.port}" title="Kill process">${icon('kill', 12)}</button>
         </div>
       </div>
     </div>
@@ -750,7 +827,7 @@ function renderApps() {
   if (favorites.length > 0) {
     html += `
       <div class="app-section">
-        <div class="section-header" onclick="toggleSection('favorites')">
+        <div class="section-header" data-act="toggleSection" data-section="favorites">
           <span class="section-toggle">${state.favoritesExpanded ? icon('chevron', 10) : '<span style="display:inline-block;transform:rotate(-90deg)">' + icon('chevron', 10) + '</span>'}</span>
           <span class="section-title">${icon('star', 12)} Favorites</span>
           <span class="section-count">${favorites.length}</span>
@@ -770,13 +847,13 @@ function renderApps() {
     html += `
       <div class="app-section" data-group-id="${group.id}" style="border-left: 3px solid ${groupColor}">
         <div class="section-header group-header">
-          <span class="section-toggle" onclick="toggleGroup('${group.id}')">${isExpanded ? icon('chevron', 10) : '<span style="display:inline-block;transform:rotate(-90deg)">' + icon('chevron', 10) + '</span>'}</span>
+          <span class="section-toggle" data-act="toggleGroup" data-group="${group.id}">${isExpanded ? icon('chevron', 10) : '<span style="display:inline-block;transform:rotate(-90deg)">' + icon('chevron', 10) + '</span>'}</span>
           <span class="group-color-dot" style="background:${groupColor}"></span>
-          <span class="section-title" onclick="toggleGroup('${group.id}')">${escapeHtml(group.name)}</span>
+          <span class="section-title" data-act="toggleGroup" data-group="${group.id}">${escapeHtml(group.name)}</span>
           <span class="section-count">${apps.length}</span>
           <div class="section-actions">
-            <button class="btn-group-action" onclick="openRenameGroupModal('${group.id}')" title="Rename">${icon('edit', 12)}</button>
-            <button class="btn-group-action btn-group-delete" onclick="confirmDeleteGroup('${group.id}')" title="Delete">${icon('kill', 12)}</button>
+            <button class="btn-group-action" data-act="openRenameGroupModal" data-group="${group.id}" title="Rename">${icon('edit', 12)}</button>
+            <button class="btn-group-action btn-group-delete" data-act="confirmDeleteGroup" data-group="${group.id}" title="Delete">${icon('kill', 12)}</button>
           </div>
         </div>
         <div class="section-apps ${isExpanded ? '' : 'collapsed'}">
@@ -792,7 +869,7 @@ function renderApps() {
   if (ungroupedApps.length > 0 || state.groups.length === 0) {
     html += `
       <div class="app-section">
-        <div class="section-header" onclick="toggleSection('others')">
+        <div class="section-header" data-act="toggleSection" data-section="others">
           <span class="section-toggle">${state.otherProjectsExpanded ? icon('chevron', 10) : '<span style="display:inline-block;transform:rotate(-90deg)">' + icon('chevron', 10) + '</span>'}</span>
           <span class="section-title">${icon('folder', 12)} Other Projects</span>
           <span class="section-count">${ungroupedApps.length}</span>
@@ -860,7 +937,7 @@ function renderAppCard(app) {
   const badges = [];
   if (reqs.docker) {
     const dockerReady = state.dockerRunning;
-    badges.push(`<span class="req-badge ${dockerReady ? '' : 'badge-warning'}" title="${dockerReady ? 'Docker running' : 'Click to start Docker'}" ${dockerReady ? '' : 'onclick="startDocker()"'}>${icon('docker', 12)}</span>`);
+    badges.push(`<span class="req-badge ${dockerReady ? '' : 'badge-warning'}" title="${dockerReady ? 'Docker running' : 'Click to start Docker'}" ${dockerReady ? '' : 'data-act="startDocker"'}>${icon('docker', 12)}</span>`);
   }
   if (reqs.node) badges.push(`<span class="req-badge" title="Node.js">N</span>`);
   if (reqs.python) badges.push(`<span class="req-badge" title="Python">Py</span>`);
@@ -875,16 +952,16 @@ function renderAppCard(app) {
   let actionsHtml = '';
   if (conflict) {
     actionsHtml = `
-      <button class="btn btn-small btn-secondary" onclick="event.stopPropagation(); openPortInBrowser(${conflict.port})" title="Open port">${icon('browser', 12)}</button>
-      <button class="btn btn-small btn-warning" onclick="event.stopPropagation(); killConflictingProcess('${app.id}')" title="Kill blocker">${icon('kill', 12)}</button>
-      <button class="btn btn-small btn-success" onclick="event.stopPropagation(); startApp('${app.id}')" title="Start">${icon('play', 12)}</button>`;
+      <button class="btn btn-small btn-secondary" data-act="openPortInBrowser" data-port="${conflict.port}" title="Open port">${icon('browser', 12)}</button>
+      <button class="btn btn-small btn-warning" data-act="killConflictingProcess" data-id="${app.id}" title="Kill blocker">${icon('kill', 12)}</button>
+      <button class="btn btn-small btn-success" data-act="startApp" data-id="${app.id}" title="Start">${icon('play', 12)}</button>`;
   } else if (isRunning || starting) {
     actionsHtml = `
-      <button class="btn btn-small btn-secondary" onclick="event.stopPropagation(); openInBrowser('${app.id}')" title="Open" ${starting ? 'disabled' : ''}>${icon('browser', 12)}</button>
-      ${managedRunning ? `<button class="btn btn-small btn-secondary" onclick="event.stopPropagation(); viewLogs('${app.id}')" title="View logs">${icon('logs', 12)}</button>` : ''}
-      <button class="btn btn-small btn-danger" onclick="event.stopPropagation(); stopApp('${app.id}')" title="Stop" ${starting ? 'disabled' : ''}>${icon('stop', 12)}</button>`;
+      <button class="btn btn-small btn-secondary" data-act="openInBrowser" data-id="${app.id}" title="Open" ${starting ? 'disabled' : ''}>${icon('browser', 12)}</button>
+      ${managedRunning ? `<button class="btn btn-small btn-secondary" data-act="viewLogs" data-id="${app.id}" title="View logs">${icon('logs', 12)}</button>` : ''}
+      <button class="btn btn-small btn-danger" data-act="stopApp" data-id="${app.id}" title="Stop" ${starting ? 'disabled' : ''}>${icon('stop', 12)}</button>`;
   } else {
-    actionsHtml = `<button class="btn btn-small btn-success" onclick="event.stopPropagation(); startApp('${app.id}')" title="Start">${icon('play', 12)}</button>`;
+    actionsHtml = `<button class="btn btn-small btn-success" data-act="startApp" data-id="${app.id}" title="Start">${icon('play', 12)}</button>`;
   }
 
   return `
@@ -895,25 +972,18 @@ function renderAppCard(app) {
          role="button"
          aria-expanded="${isExpanded}"
          aria-label="${escapeHtml(app.name)} — press Enter to ${isExpanded ? 'collapse' : 'expand'} details"
-         ondragstart="handleDragStart(event, '${app.id}')"
-         ondragover="handleDragOver(event)"
-         ondragenter="handleDragEnter(event)"
-         ondragleave="handleDragLeave(event)"
-         ondrop="handleDrop(event, '${app.id}')"
-         ondragend="handleDragEnd(event)"
-         onkeydown="handleCardKeydown(event, '${app.id}')"
-         onclick="if (event.target.closest('.app-checkbox, .btn-star, .app-actions, .app-actions-visible, .drag-handle, button, .req-badge')) return; toggleAppExpansion('${app.id}')">
+         >
       <span class="drag-handle" title="Drag to reorder" aria-hidden="true">${icon('grip', 14)}</span>
       <input type="checkbox" class="app-checkbox"
              ${isSelected ? 'checked' : ''}
-             onclick="event.stopPropagation()"
-             onchange="event.stopPropagation(); toggleAppSelection('${app.id}')"
+             data-change="toggleAppSelection"
+             data-id="${app.id}"
              aria-label="Select ${escapeHtml(app.name)}"
              title="Select">
       <span class="status-dot ${statusClass}"></span>
       <div class="app-name-area">
         <button class="btn-star ${app.isFavorite ? 'starred' : ''}"
-                onclick="event.stopPropagation(); toggleFavorite('${app.id}')"
+                data-act="toggleFavorite" data-id="${app.id}"
                 title="${app.isFavorite ? 'Unfavorite' : 'Favorite'}">
           ${app.isFavorite ? icon('star', 14) : icon('star-outline', 14)}
         </button>
@@ -928,9 +998,9 @@ function renderAppCard(app) {
         ${actionsHtml}
       </div>
       <div class="app-actions">
-        <button class="btn btn-small btn-secondary" onclick="event.stopPropagation(); openAppFolder('${app.id}')" title="Open folder">${icon('folder', 12)}</button>
-        <button class="btn btn-small btn-secondary" onclick="event.stopPropagation(); editApp('${app.id}')" title="Edit">${icon('edit', 12)}</button>
-        <button class="btn btn-small btn-secondary" onclick="event.stopPropagation(); deleteApp('${app.id}')" title="Delete">${icon('trash', 12)}</button>
+        <button class="btn btn-small btn-secondary" data-act="openAppFolder" data-id="${app.id}" title="Open folder">${icon('folder', 12)}</button>
+        <button class="btn btn-small btn-secondary" data-act="editApp" data-id="${app.id}" title="Edit">${icon('edit', 12)}</button>
+        <button class="btn btn-small btn-secondary" data-act="deleteApp" data-id="${app.id}" title="Delete">${icon('trash', 12)}</button>
       </div>
       <div class="app-expanded-details">
         <div class="app-detail-row"><span class="app-detail-label">CMD</span><span class="app-detail-value">${escapeHtml(app.command)}</span></div>
@@ -1248,31 +1318,39 @@ function collapseAllApps() {
 // ============ Drag and Drop ============
 let draggedAppId = null;
 
-function handleDragStart(event, appId) {
-  draggedAppId = appId;
-  event.currentTarget.classList.add('dragging');
+function handleDragStart(event) {
+  const card = event.target.closest('.app-card');
+  if (!card) return;
+  draggedAppId = card.dataset.id;
+  card.classList.add('dragging');
   event.dataTransfer.effectAllowed = 'move';
-  event.dataTransfer.setData('text/html', event.currentTarget.innerHTML);
+  event.dataTransfer.setData('text/plain', draggedAppId);
 }
 
 function handleDragOver(event) {
+  if (!event.target.closest('.app-card')) return;
   event.preventDefault();
   event.dataTransfer.dropEffect = 'move';
   return false;
 }
 
 function handleDragEnter(event) {
-  event.currentTarget.classList.add('drag-over');
+  const card = event.target.closest('.app-card');
+  if (card) card.classList.add('drag-over');
 }
 
 function handleDragLeave(event) {
-  event.currentTarget.classList.remove('drag-over');
+  const card = event.target.closest('.app-card');
+  if (card && !card.contains(event.relatedTarget)) card.classList.remove('drag-over');
 }
 
-async function handleDrop(event, targetAppId) {
+async function handleDrop(event) {
+  const card = event.target.closest('.app-card');
+  if (!card) return;
+  const targetAppId = card.dataset.id;
   event.stopPropagation();
   event.preventDefault();
-  event.currentTarget.classList.remove('drag-over');
+  card.classList.remove('drag-over');
 
   if (draggedAppId === targetAppId) return;
 
@@ -1303,9 +1381,11 @@ async function handleDrop(event, targetAppId) {
   }
 }
 
-function handleDragEnd(event) {
-  event.currentTarget.classList.remove('dragging');
-  document.querySelectorAll('.app-card').forEach(card => card.classList.remove('drag-over'));
+function handleDragEnd() {
+  document.querySelectorAll('.app-card').forEach(card => {
+    card.classList.remove('drag-over');
+    card.classList.remove('dragging');
+  });
   draggedAppId = null;
 }
 
@@ -1421,7 +1501,7 @@ function renderScanPaths(scanPaths) {
   container.innerHTML = scanPaths.map(path => `
     <div class="scan-path-item">
       <span class="path-text">${escapeHtml(path)}</span>
-      <button class="btn btn-small btn-danger" onclick="removeScanPath('${escapeHtml(path).replace(/'/g, "\\'")}')">Remove</button>
+      <button class="btn btn-small btn-danger" data-act="removeScanPath" data-path="${escapeHtml(path)}">Remove</button>
     </div>
   `).join('');
 }
@@ -1472,7 +1552,7 @@ function showDiscoveriesModal(projects) {
     return `
       <div class="discovery-item" data-index="${index}">
         <input type="checkbox" class="discovery-checkbox"
-               onchange="toggleProjectSelection(${index})"
+               data-change="toggleProjectSelection" data-index="${index}"
                title="Select">
         <div class="discovery-content">
           <div class="discovery-header">
@@ -1487,7 +1567,7 @@ function showDiscoveriesModal(projects) {
             <div class="detail-row"><span class="label">Port:</span><code>${proj.port || 'Auto'}</code></div>
             <div class="detail-row"><span class="label">Path:</span><code class="path-text">${escapeHtml(proj.path)}</code></div>
           </div>
-          <button class="btn btn-small btn-primary btn-add-discovery" onclick="addDiscoveredProject(${index})">Add</button>
+          <button class="btn btn-small btn-primary btn-add-discovery" data-act="addDiscoveredProject" data-index="${index}">Add</button>
         </div>
       </div>
     `;
@@ -1632,7 +1712,7 @@ function renderGroupColorSwatches(selected) {
     <button type="button"
             class="color-swatch ${c === current ? 'selected' : ''}"
             style="background:${c}"
-            onclick="selectGroupColor('${c}')"
+            data-act="selectGroupColor" data-color="${c}"
             title="${c}"></button>
   `).join('');
   document.getElementById('group-color-input').value = current;

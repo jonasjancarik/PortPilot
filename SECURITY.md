@@ -25,7 +25,7 @@ independent layers — no single one is relied upon.
 | 3 | **Host-header allowlist** | **DNS rebinding** — `evil.com` re-resolving to `127.0.0.1` arrives with `Host: evil.com` and is rejected before any handler runs | `hostOk()` |
 | 4 | **Origin allowlist + locked CORS** | Cross-origin browser calls — CORS reflects only the agent's own origin, never `*` | `originOk()`, `setSecurityHeaders()` |
 | 5 | **Custom header forces preflight** | "Simple request" CSRF — `X-PortPilot-Token` makes every `/api` call non-simple, so the browser sends a CORS preflight that a foreign origin fails | `portpilot-web.js`, OPTIONS handler |
-| 6 | **Strict CSP on the served UI** | Remote script injection / data exfiltration — `default-src 'self'` blocks non-loopback fetches and remote scripts | CSP meta in served `index.html` |
+| 6 | **Strict CSP on the served UI** | XSS → code-exec and data exfiltration — `script-src 'self'` (no `'unsafe-inline'`; all UI actions use delegated `data-act` handlers), `connect-src 'self'`, `default-src 'self'` block inline scripts, remote scripts, and non-loopback fetches | CSP meta in `index.html` |
 | 7 | **Token file `chmod 600`** | Other local users reading the token | `writeAgentFile()` |
 | 8 | **1 MB request cap + path-traversal guard** | Memory-exhaustion and `../` file reads | request handler, `serveStatic()` |
 
@@ -63,12 +63,9 @@ Probed against a running agent (`npm run agent`):
 - **No TLS.** Loopback (`127.0.0.1`) is treated as a secure context by browsers,
   so TLS is omitted; traffic never leaves the machine. A self-signed cert could
   be added if desired.
-- **`'unsafe-inline'` in `script-src`.** The renderer uses inline `onclick`
-  handlers, so the CSP permits inline scripts. This is inherited from the desktop
-  UI; migrating handlers to delegated listeners would allow removing it.
-- **Live push events** (`config-changed`, etc.) are not delivered over HTTP in
-  this preview; the UI's periodic auto-scan covers refresh. Server-Sent Events
-  are a planned addition.
+- **`style-src 'unsafe-inline'`.** The UI uses a few inline `style=` attributes
+  (e.g. group colour dots), so inline *styles* are still permitted. Inline
+  *scripts* are not (`script-src 'self'`), which is the security-relevant case.
 - **One backend at a time.** Apps started by the agent and apps started by the
   desktop app are tracked in separate process tables. Run one or the other.
 
