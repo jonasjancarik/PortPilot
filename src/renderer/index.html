@@ -134,6 +134,21 @@
             <input type="checkbox" id="setting-auto-resize">
           </label>
         </div>
+        <div class="settings-section" id="web-agent-section">
+          <h3>Web Access <span class="preview-tag">preview</span></h3>
+          <label class="setting-row">
+            <span>Open PortPilot in your browser (local web app)</span>
+            <input type="checkbox" id="setting-web-agent">
+          </label>
+          <div id="web-agent-info" class="web-agent-info hidden">
+            <code id="web-agent-url"></code>
+            <div class="button-row">
+              <button type="button" id="btn-open-web" class="btn btn-secondary btn-small">Open in Browser</button>
+              <button type="button" id="btn-copy-web" class="btn btn-secondary btn-small">Copy URL</button>
+            </div>
+            <p class="web-agent-note">Runs on 127.0.0.1 only, protected by a per-session token. See SECURITY.md.</p>
+          </div>
+        </div>
         <div class="settings-section">
           <h3>Data</h3>
           <div class="button-row">

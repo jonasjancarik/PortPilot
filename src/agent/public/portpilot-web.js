@@ -12,6 +12,21 @@
 (function () {
   const TOKEN = document.querySelector('meta[name="pp-token"]')?.content || '';
 
+  const sseListeners = {};
+  let eventSource = null;
+  function ensureEventSource() {
+    if (eventSource) return;
+    // EventSource can't set headers, so the token rides in the query string.
+    // The endpoint still validates Host + Origin + token server-side.
+    eventSource = new EventSource('/events?token=' + encodeURIComponent(TOKEN));
+    eventSource.addEventListener('config-changed', (e) => {
+      let data = {};
+      try { data = JSON.parse(e.data); } catch { /* ignore */ }
+      (sseListeners['config-changed'] || []).forEach((cb) => { try { cb(data); } catch { /* ignore */ } });
+    });
+    eventSource.onerror = () => { /* browser auto-reconnects */ };
+  }
+
   async function call(action, ...args) {
     const res = await fetch('/api', {
       method: 'POST',
@@ -70,9 +85,13 @@
       start: () => call('docker:start')
     },
 
-    // Main-process push events don't exist over HTTP in this preview; the
-    // renderer's periodic auto-scan covers refresh. (SSE is a future add.)
-    on: () => {},
+    // Live updates via Server-Sent Events. The renderer subscribes to
+    // 'config-changed'; we lazily open one EventSource and fan events out.
+    on: (channel, cb) => {
+      if (!sseListeners[channel]) sseListeners[channel] = [];
+      sseListeners[channel].push(cb);
+      ensureEventSource();
+    },
 
     // Open links in a new browser tab.
     openExternal: (url) => { window.open(url, '_blank', 'noopener'); return Promise.resolve({ success: true }); },

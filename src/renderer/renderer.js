@@ -191,6 +191,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupIcons();
   loadTheme();
   await loadSettings();
+  initWebAgentUI();
   checkDockerStatus();
   await loadApps();
 
@@ -318,6 +319,18 @@ function setupEventListeners() {
   document.getElementById('btn-delete-cancel').addEventListener('click', closeDeleteConfirm);
   document.getElementById('btn-delete-confirm').addEventListener('click', confirmDeleteApp);
   document.getElementById('btn-delete-all-instead').addEventListener('click', deleteAllInstead);
+
+  // Web agent toggle (Option C) - only in the desktop build (preload exposes agent)
+  if (window.portpilot.agent) {
+    document.getElementById('setting-web-agent').addEventListener('change', toggleWebAgent);
+    document.getElementById('btn-open-web').addEventListener('click', () => window.portpilot.agent.open());
+    document.getElementById('btn-copy-web').addEventListener('click', () => {
+      const url = document.getElementById('web-agent-url').textContent;
+      if (url) { navigator.clipboard.writeText(url); showToast('URL copied', 'success'); }
+    });
+  } else {
+    document.getElementById('web-agent-section')?.classList.add('hidden');
+  }
 
   // Logs modal
   document.getElementById('logs-close').addEventListener('click', closeLogs);
@@ -1858,6 +1871,46 @@ function setTheme(themeName, showNotification = true) {
       'glass': 'Glass'
     };
     showToast(`Theme: ${themeLabels[themeName] || themeName}`, 'success');
+  }
+}
+
+// ============ Web Agent (Option C) ============
+async function initWebAgentUI() {
+  if (!window.portpilot.agent) {
+    document.getElementById('web-agent-section')?.classList.add('hidden');
+    return;
+  }
+  try {
+    const status = await window.portpilot.agent.status();
+    document.getElementById('setting-web-agent').checked = !!status.running;
+    updateWebAgentUI(status.running ? status : null);
+  } catch { /* leave default */ }
+}
+
+function updateWebAgentUI(info) {
+  const box = document.getElementById('web-agent-info');
+  if (info && info.url) {
+    document.getElementById('web-agent-url').textContent = info.url;
+    box.classList.remove('hidden');
+  } else {
+    box.classList.add('hidden');
+  }
+}
+
+async function toggleWebAgent(e) {
+  if (e.target.checked) {
+    const result = await window.portpilot.agent.start();
+    if (result.success) {
+      updateWebAgentUI(result);
+      showToast(`Web access on: ${result.url}`, 'success');
+    } else {
+      e.target.checked = false;
+      showToast('Failed to enable web access: ' + result.error, 'error');
+    }
+  } else {
+    await window.portpilot.agent.stop();
+    updateWebAgentUI(null);
+    showToast('Web access disabled', 'info');
   }
 }
 

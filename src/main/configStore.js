@@ -38,11 +38,15 @@ class ConfigStore {
             const newConfig = JSON.stringify(this.config);
 
             // Only notify if config actually changed
-            if (oldConfig !== newConfig && this.mainWindow && !this.mainWindow.isDestroyed()) {
-              this.mainWindow.webContents.send('config-changed', {
-                apps: this.config.apps,
-                settings: this.config.settings
-              });
+            if (oldConfig !== newConfig) {
+              const payload = { apps: this.config.apps, settings: this.config.settings };
+              if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+                this.mainWindow.webContents.send('config-changed', payload);
+              }
+              // Optional transport-agnostic listener (e.g. the web agent's SSE broadcast)
+              if (typeof this.onConfigChange === 'function') {
+                try { this.onConfigChange(payload); } catch (e) { console.error('onConfigChange failed:', e.message); }
+              }
             }
           }, 100); // 100ms debounce
         }

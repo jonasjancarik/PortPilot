@@ -77,5 +77,13 @@ contextBridge.exposeInMainWorld('portpilot', {
   // Tray operations
   tray: {
     update: (runningApps) => ipcRenderer.invoke('tray:update', runningApps)
+  },
+
+  // Web agent (opt-in browser access)
+  agent: {
+    status: () => ipcRenderer.invoke('agent:status'),
+    start: () => ipcRenderer.invoke('agent:start'),
+    stop: () => ipcRenderer.invoke('agent:stop'),
+    open: () => ipcRenderer.invoke('agent:open')
   }
 });
