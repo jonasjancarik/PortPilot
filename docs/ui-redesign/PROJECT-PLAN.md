@@ -48,6 +48,16 @@ Both `classify()` and `statusOf()` live in ONE shared module so desktop, VS Code
 - Tests: `tests/run-unit.js` (26 cases, no display) via `npm run test:unit`.
 - **Phase 1 wiring note:** the renderer cannot `require`, so add `<script src="../core/status.js"></script>` before `renderer.js` in `index.html`, then call `window.PortPilotStatus.classify(p)` / `.statusOf(...)` inside `renderPorts()`. For the agent/web portal (Phase 7), add `core/status.js` to `vscode-extension/scripts/copy-runtime.js` so it ships in the bundle.
 
+### Phase 1 landed (2026-06-08)
+
+- `renderPorts()` now classifies the unmatched ports via `window.PortPilotStatus.classify` and renders three collapsible groups (`renderPortGroup` / `renderPortRow`): My Dev Servers / Other User Ports / System & OS, System collapsed by default. Per-group collapse persists in settings (`portGroupExpanded`).
+- Each row is a 6-column grid (status dot / :port link / process / command / pid / actions), aligned across rows. `:PORT` opens localhost. A network-exposed glyph shows when a port binds beyond loopback.
+- Header label changed "Unmatched Ports" -> "Active Ports"; added a `#ports-summary` breakdown ("N dev · N other · N system").
+- Status-dot shape classes + `--status-*` are used live (all active ports = running/green for now; conflict/error/starting states arrive with app-merge in Phase 2).
+- Verified against a real 43-port scan via `node tests/visual-ports.js` (Electron + Playwright): 4 dev / 27 other / 12 system, System collapsed, zero console errors, module loads under CSP.
+- **Known leftover:** the old `.port-card*` / `.cmd-tooltip*` CSS rules in `styles.css` are now dead (their only consumer was the replaced markup). Left in place to keep the Phase 1 diff additive; clear them in the Phase 5 settings/polish pass.
+- **Not yet (Phase 2+):** registered apps still render in their own Apps section, not merged into My Dev Servers. Actions are still always-present (lightly dimmed until hover); full hover-reveal, kill-gating on system rows, and the detail drawer come in Phase 3.
+
 ## Phase / PR breakdown
 
 Each phase is one shippable PR. Wave gates: finish a wave before scoping the next.
@@ -57,7 +67,7 @@ Each phase is one shippable PR. Wave gates: finish a wave before scoping the nex
 | # | Phase | Surface | Scope | Effort | Status |
 |---|---|---|---|---|---|
 | 0 | Shared model | all (core) | `classify(port)` + `statusOf(item)` + status CSS variables for all themes. Pure functions, unit-tested. No UI change yet. | S | **done** (2026-06-08) |
-| 1 | Grouped dense table | desktop | Replace the two-column card grid with a single dense table grouped into collapsible counted sections: MY DEV SERVERS (expanded) / OTHER USER PORTS / SYSTEM & OS (collapsed by default). Status dot in a fixed left gutter + state word. `:PORT` as a clickable localhost link. Aligned columns (status / :port / process / pid / command). Summary line "N dev running - N conflict - N total". | M | later |
+| 1 | Grouped dense table | desktop | Replace the two-column card grid with a single dense table grouped into collapsible counted sections: MY DEV SERVERS (expanded) / OTHER USER PORTS / SYSTEM & OS (collapsed by default). Status dot in a fixed left gutter + state word. `:PORT` as a clickable localhost link. Aligned columns (status / :port / process / pid / command). Summary line "N dev running - N conflict - N total". | M | **done** (2026-06-08) |
 | 2 | Unify apps + ports | desktop | Merge MY APPS into the same surface. A registered app is a row in MY DEV SERVERS showing its live resolved port + uptime when running, or a Start affordance when stopped. Unmatched live ports stay in OTHER/SYSTEM with an "Adopt as app" action. Retire the standalone My Apps tab as a primary destination. | M | later |
 
 ### Wave 2 - depth + polish (scope AFTER Wave 1 ships)

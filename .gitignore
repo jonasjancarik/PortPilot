@@ -9,6 +9,9 @@ test-results/
 # Demo GIF build intermediates (regeneratable from ffmpeg)
 docs/gif-frames/
 
+# Local UI-redesign verification screenshots (show real machine state)
+docs/ui-redesign/phase*.png
+
 # Marketing materials (keep local)
 LINKEDIN_TWITTER_POSTS.md
 REDDIT_LAUNCH_POSTS.md

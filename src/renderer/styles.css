@@ -689,6 +689,139 @@ body {
   gap: 3px;
 }
 
+/* ============ Status dots (shared status model) ============ */
+/* Shape carries state alongside colour, so status survives greyscale and
+   colour-blind vision. --dot-color is set per row from a --status-* variable. */
+.status-dot {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+  display: inline-block;
+  border-radius: 50%;
+  background: var(--dot-color, var(--text-muted));
+}
+.status-dot--ring {
+  background: transparent;
+  border: 1.5px solid var(--dot-color, var(--text-muted));
+}
+.status-dot--disc-pulse {
+  animation: pp-status-pulse 1.3s ease-in-out infinite;
+}
+.status-dot--triangle {
+  width: 0;
+  height: 0;
+  border-radius: 0;
+  background: transparent;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 9px solid var(--dot-color, var(--accent-yellow));
+}
+.status-dot--circle-x {
+  position: relative;
+}
+.status-dot--circle-x::after {
+  content: '\00d7';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--bg-primary);
+}
+@keyframes pp-status-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.78); }
+}
+
+/* ============ Grouped port rows (redesign) ============ */
+.ports-summary {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin-left: 8px;
+}
+.port-group {
+  margin-bottom: 6px;
+}
+.port-group .section-header {
+  margin-bottom: 2px;
+}
+.port-group-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.port-group-rows.collapsed {
+  display: none;
+}
+.port-row {
+  display: grid;
+  grid-template-columns: 14px 72px minmax(96px, 168px) 1fr 46px auto;
+  align-items: center;
+  column-gap: 10px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: var(--border-width) solid transparent;
+}
+.port-row:hover {
+  background: var(--card-bg);
+  border-color: var(--card-border);
+}
+.port-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.port-link {
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--accent-cyan);
+  text-decoration: none;
+  cursor: pointer;
+}
+.port-link:hover {
+  text-decoration: underline;
+}
+.port-exposed {
+  color: var(--accent-yellow);
+  display: inline-flex;
+  align-items: center;
+}
+.port-proc {
+  font-size: 0.76rem;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.port-cmd {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+}
+.port-pid {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.port-row-actions {
+  display: flex;
+  gap: 3px;
+  opacity: 0.55;
+  transition: opacity 0.12s ease;
+}
+.port-row:hover .port-row-actions {
+  opacity: 1;
+}
+
 /* ============ Apps List ============ */
 .apps-list {
   display: flex;

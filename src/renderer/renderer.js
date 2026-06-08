@@ -55,6 +55,7 @@ const state = {
   expandedApps: new Set(),
   expandedPorts: new Map(),
   portsCollapsed: false,
+  portGroupExpanded: { dev: true, other: true, system: false },
   settingsOpen: false
 };
 
@@ -180,6 +181,7 @@ const dom = {
   portsList: document.getElementById('ports-list'),
   appsList: document.getElementById('apps-list'),
   portCount: document.getElementById('port-count'),
+  portsSummary: document.getElementById('ports-summary'),
   modal: document.getElementById('modal-app'),
   appForm: document.getElementById('app-form'),
   toastContainer: document.getElementById('toast-container')
@@ -251,6 +253,7 @@ function setupDelegation() {
     copyPort: el => copyPort(+el.dataset.port),
     killPort: el => killPort(+el.dataset.port),
     toggleSection: el => toggleSection(el.dataset.section),
+    togglePortGroup: el => togglePortGroup(el.dataset.portgroup),
     toggleGroup: el => toggleGroup(el.dataset.group),
     openRenameGroupModal: el => openRenameGroupModal(el.dataset.group),
     confirmDeleteGroup: el => confirmDeleteGroup(el.dataset.group),
@@ -506,88 +509,98 @@ async function scanPorts() {
 }
 
 function renderPorts() {
-  // Get matched port numbers (ports associated with apps)
+  const S = window.PortPilotStatus;
+
+  // Ports matched to a registered app are shown in the Apps section, not here.
+  // (Phase 2 of the redesign unifies the two surfaces.) Everything else is
+  // classified into dev / other / system and shown in collapsible groups, so
+  // the user's real dev servers are no longer buried in OS noise.
   const matchedPorts = new Set();
-  for (const [appId, detected] of Object.entries(state.detectedApps)) {
+  for (const detected of Object.values(state.detectedApps)) {
     if (detected && detected.port) matchedPorts.add(detected.port);
   }
+  let ports = state.ports.filter(p => !matchedPorts.has(p.port));
 
-  // Filter to unmatched ports only
-  let unmatched = state.ports.filter(p => !matchedPorts.has(p.port));
-
-  // Apply global search
   if (state.globalSearch) {
     const q = state.globalSearch.toLowerCase();
-    unmatched = unmatched.filter(p => {
-      const searchStr = `${p.port} ${p.processName || ''} ${p.commandLine || ''}`.toLowerCase();
-      return searchStr.includes(q);
-    });
+    ports = ports.filter(p =>
+      `${p.port} ${p.processName || ''} ${p.commandLine || ''}`.toLowerCase().includes(q));
   }
 
-  dom.portCount.textContent = `${unmatched.length}`;
+  const buckets = { dev: [], other: [], system: [] };
+  for (const p of ports) buckets[S.classify(p)].push(p);
 
-  if (unmatched.length === 0) {
-    dom.portsList.innerHTML = `<div class="empty-state">
-      ${state.ports.length === 0 ? 'No active ports found. Click scan to refresh.' : 'All ports are matched to apps.'}
-    </div>`;
+  const total = ports.length;
+  dom.portCount.textContent = `${total}`;
+  if (dom.portsSummary) {
+    dom.portsSummary.textContent = total === 0
+      ? ''
+      : `${buckets.dev.length} dev · ${buckets.other.length} other · ${buckets.system.length} system`;
+  }
+
+  if (total === 0) {
+    dom.portsList.innerHTML = `<div class="empty-state">${
+      state.ports.length === 0
+        ? 'Click scan to discover active ports'
+        : (state.globalSearch
+            ? `No ports match "${escapeHtml(state.globalSearch)}"`
+            : 'All ports are matched to apps.')
+    }</div>`;
     return;
   }
 
-  dom.portsList.innerHTML = unmatched.map(p => {
-    const addr = p.address || '';
-    const isIPv6 = addr.includes('[');
-    const isLocalOnly = addr.includes('127.0.0.1') || addr.includes('[::1]');
-    const bindTitle = isLocalOnly ? 'Localhost only' : 'All interfaces - Network accessible';
-    const bindIcon = isLocalOnly ? icon('home', 12) : icon('globe', 12);
-    const ipVersion = isIPv6 ? 'v6' : 'v4';
-    const cmdLine = p.commandLine || '';
-    const exePath = extractExePath(cmdLine);
-    const details = state.expandedPorts.get(p.port);
+  dom.portsList.innerHTML = S.GROUP_ORDER
+    .filter(key => buckets[key].length > 0)
+    .map(key => renderPortGroup(key, S.GROUPS[key], buckets[key]))
+    .join('');
+}
 
-    const formatUptime = (seconds) => {
-      if (!seconds) return '';
-      const hours = Math.floor(seconds / 3600);
-      const minutes = Math.floor((seconds % 3600) / 60);
-      if (hours > 0) return `${hours}h ${minutes}m`;
-      if (minutes > 0) return `${minutes}m`;
-      return `${seconds}s`;
-    };
-
-    return `
-    <div class="port-card" data-port="${p.port}">
-      <div class="port-card-header">
-        <span class="port-number">:${p.port}</span>
-        <span class="port-bind" title="${bindTitle}">${bindIcon}</span>
-        <span class="port-ip">${ipVersion}</span>
-        <span class="port-process" title="${escapeHtml(p.processName || 'Unknown')}">${escapeHtml(p.processName || 'Unknown')}</span>
-        ${details ? `
-        <span class="port-stat" title="Memory">${details.memory ? details.memory + ' MB' : ''}</span>
-        <span class="port-stat" title="Uptime">${formatUptime(details.uptime) || ''}</span>
-        <span class="port-stat" title="Connections">${details.connections !== null ? details.connections + ' conn' : ''}</span>
-        ` : ''}
-        <span class="port-pid">${p.pid || ''}</span>
-        ${cmdLine ? `
-        <span class="port-cmd-icon" title="Command path">
-          CMD
-          <div class="cmd-tooltip">
-            <div class="cmd-tooltip-header">
-              <span class="cmd-tooltip-title">Command</span>
-              <button class="cmd-copy-btn" data-act="copyCmdPath" data-cmd="${escapeHtml(cmdLine)}">
-                ${icon('copy', 10)} Copy
-              </button>
-            </div>
-            <div class="cmd-tooltip-path">${escapeHtml(cmdLine)}</div>
-          </div>
-        </span>` : ''}
-        <div class="port-actions">
-          <button class="btn btn-small btn-secondary" data-act="openPortInBrowser" data-port="${p.port}" title="Open in browser">${icon('browser', 12)}</button>
-          ${exePath ? `<button class="btn btn-small btn-secondary" data-act="openProcessFolder" data-path="${escapeHtml(exePath)}" title="Open folder">${icon('folder', 12)}</button>` : ''}
-          <button class="btn btn-small btn-secondary" data-act="copyPort" data-port="${p.port}" title="Copy localhost:${p.port}">${icon('copy', 12)}</button>
-          <button class="btn btn-small btn-danger" data-act="killPort" data-port="${p.port}" title="Kill process">${icon('kill', 12)}</button>
-        </div>
+function renderPortGroup(key, meta, rows) {
+  const expanded = state.portGroupExpanded[key] !== false;
+  const chev = expanded
+    ? icon('chevron', 10)
+    : '<span style="display:inline-block;transform:rotate(-90deg)">' + icon('chevron', 10) + '</span>';
+  return `
+    <div class="port-group" data-portgroup="${key}">
+      <div class="section-header port-group-header" data-act="togglePortGroup" data-portgroup="${key}">
+        <span class="section-toggle">${chev}</span>
+        <span class="section-title">${escapeHtml(meta.label)}</span>
+        <span class="section-count">${rows.length}</span>
       </div>
-    </div>
-  `}).join('');
+      <div class="port-group-rows ${expanded ? '' : 'collapsed'}">
+        ${rows.map(renderPortRow).join('')}
+      </div>
+    </div>`;
+}
+
+function renderPortRow(p) {
+  const S = window.PortPilotStatus;
+  // Active listening ports are, by definition, running. Other states
+  // (conflict / error / starting) arrive in later phases once apps are merged.
+  const status = S.statusOf({ running: true });
+  const proc = p.processName || 'Unknown';
+  const cmdLine = p.commandLine || '';
+  const exePath = extractExePath(cmdLine);
+  const addr = p.address || '';
+  const exposed = addr && !(addr.includes('127.0.0.1') || addr.includes('[::1]') || addr.includes('localhost'));
+
+  return `
+    <div class="port-row" data-port="${p.port}">
+      <span class="status-dot status-dot--${status.shape}" style="--dot-color: var(${status.token})" title="${status.label}"></span>
+      <span class="port-cell">
+        <a class="port-link" data-act="openPortInBrowser" data-port="${p.port}" title="Open localhost:${p.port}">:${p.port}</a>
+        ${exposed ? `<span class="port-exposed" title="Listening on all interfaces - network accessible">${icon('globe', 10)}</span>` : ''}
+      </span>
+      <span class="port-proc" title="${escapeHtml(proc)}">${escapeHtml(proc)}</span>
+      <span class="port-cmd" title="${escapeHtml(cmdLine)}">${escapeHtml(cmdLine)}</span>
+      <span class="port-pid" title="PID ${p.pid || ''}">${p.pid || ''}</span>
+      <span class="port-row-actions">
+        <button class="btn btn-small btn-secondary" data-act="openPortInBrowser" data-port="${p.port}" title="Open in browser">${icon('browser', 12)}</button>
+        ${exePath ? `<button class="btn btn-small btn-secondary" data-act="openProcessFolder" data-path="${escapeHtml(exePath)}" title="Open folder">${icon('folder', 12)}</button>` : ''}
+        <button class="btn btn-small btn-secondary" data-act="copyPort" data-port="${p.port}" title="Copy localhost:${p.port}">${icon('copy', 12)}</button>
+        <button class="btn btn-small btn-danger" data-act="killPort" data-port="${p.port}" title="Kill process">${icon('kill', 12)}</button>
+      </span>
+    </div>`;
 }
 
 async function killPort(port) {
@@ -1174,6 +1187,13 @@ async function toggleSection(section) {
     await window.portpilot.config.updateSettings({ otherProjectsExpanded: state.otherProjectsExpanded });
   }
   renderApps();
+}
+
+async function togglePortGroup(key) {
+  if (!(key in state.portGroupExpanded)) return;
+  state.portGroupExpanded[key] = !state.portGroupExpanded[key];
+  await window.portpilot.config.updateSettings({ portGroupExpanded: state.portGroupExpanded });
+  renderPorts();
 }
 
 // ============ Groups ============
@@ -1874,6 +1894,14 @@ async function loadSettings() {
     document.getElementById('setting-auto-resize').checked = state.settings.autoResizeWindow === true;
     state.favoritesExpanded = result.settings.favoritesExpanded !== false;
     state.otherProjectsExpanded = result.settings.otherProjectsExpanded !== false;
+    const pge = result.settings.portGroupExpanded;
+    if (pge && typeof pge === 'object') {
+      state.portGroupExpanded = {
+        dev: pge.dev !== false,
+        other: pge.other !== false,
+        system: pge.system === true,
+      };
+    }
   }
   await loadDiscoverySettings();
 }

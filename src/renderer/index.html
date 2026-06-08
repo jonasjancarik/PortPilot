@@ -57,12 +57,13 @@
         </div>
       </section>
 
-      <!-- Active Ports Section (unmatched) -->
+      <!-- Active Ports Section (grouped: dev / other / system) -->
       <section id="ports-section" class="section collapsible">
         <div class="section-header-bar" id="ports-section-toggle">
           <span class="section-chevron"></span>
-          <span class="section-label">Unmatched Ports</span>
+          <span class="section-label">Active Ports</span>
           <span id="port-count" class="count-badge count-badge-small">0</span>
+          <span id="ports-summary" class="ports-summary"></span>
         </div>
         <div id="ports-list" class="ports-grid">
           <div class="empty-state">Click scan to discover active ports</div>
@@ -325,6 +326,7 @@
     <div id="toast-container"></div>
   </div>
 
+  <script src="../core/status.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>
