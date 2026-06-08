@@ -213,6 +213,11 @@ async function main() {
 
   const shutdown = () => {
     try { fs.rmSync(path.join(getConfigDir(), 'agent.json'), { force: true }); } catch { /* ignore */ }
+    // Opt-in: also stop the dev servers this agent started (mirrors the desktop
+    // app's stopAppsOnQuit). Off by default, so dev servers survive a portal stop.
+    if (process.env.PORTPILOT_STOP_APPS_ON_EXIT === '1') {
+      try { require('../main/processManager').cleanupAllProcesses(); } catch { /* ignore */ }
+    }
     agent.stop().then(() => process.exit(0));
     setTimeout(() => process.exit(0), 1000).unref();
   };

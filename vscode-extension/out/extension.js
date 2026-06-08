@@ -42,6 +42,8 @@ const config_1 = require("./config");
 const appsTreeProvider_1 = require("./appsTreeProvider");
 const portsTreeProvider_1 = require("./portsTreeProvider");
 const portScanner_1 = require("./portScanner");
+const webPortal_1 = require("./webPortal");
+let webPortal;
 function activate(context) {
     const appsProvider = new appsTreeProvider_1.AppsTreeProvider();
     const portsProvider = new portsTreeProvider_1.PortsTreeProvider();
@@ -81,6 +83,22 @@ function activate(context) {
     context.subscriptions.push({ dispose: () => clearInterval(interval) });
     // Initial load
     refreshAll();
+    // ===== Web Portal (opt-in: run the browser UI from this window, no Electron) =====
+    webPortal = new webPortal_1.WebPortal(context);
+    if (vscode.workspace.getConfiguration('portpilot').get('webPortal.enabled', false)) {
+        webPortal.start();
+    }
+    context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
+        if (e.affectsConfiguration('portpilot.webPortal.enabled')) {
+            const on = vscode.workspace.getConfiguration('portpilot').get('webPortal.enabled', false);
+            if (on) {
+                webPortal?.start({ notify: true });
+            }
+            else {
+                webPortal?.stop();
+            }
+        }
+    }));
     // Commands
     context.subscriptions.push(vscode.commands.registerCommand('portpilot.refresh', () => {
         refreshAll();
@@ -335,7 +353,21 @@ function activate(context) {
         (0, config_1.writeConfig)(config);
         refreshAll();
         vscode.window.showInformationMessage(`Deleted ${count} apps`);
+    }), vscode.commands.registerCommand('portpilot.startWebPortal', () => {
+        webPortal?.start({ notify: true });
+    }), vscode.commands.registerCommand('portpilot.stopWebPortal', () => {
+        webPortal?.stop();
+        vscode.window.setStatusBarMessage('PortPilot: Web portal stopped', 2000);
+    }), vscode.commands.registerCommand('portpilot.openWebPortal', () => {
+        if (webPortal?.isRunning()) {
+            webPortal.openInBrowser();
+        }
+        else {
+            webPortal?.start({ notify: true });
+        }
     }));
 }
-function deactivate() { }
+function deactivate() {
+    webPortal?.stop();
+}
 //# sourceMappingURL=extension.js.map
