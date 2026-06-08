@@ -23,7 +23,7 @@ azure-certification-guide-styled.html
 CROSS_SESSION_AWARENESS_*.md
 TEST_PLAN_*.md
 take-screenshots.md
-screenshots/
+/screenshots/
 *.ps1
 AUTO-RESIZE-FEATURE.md
 
