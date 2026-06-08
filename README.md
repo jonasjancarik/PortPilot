@@ -6,7 +6,7 @@
 
 **[MCP Integration Setup](mcp-server/README.md)**
 
-[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](https://github.com/m4cd4r4/PortPilot/releases/tag/v3.0.0)
+[![Version](https://img.shields.io/badge/version-3.1.0-blue.svg)](https://github.com/m4cd4r4/PortPilot/releases/tag/v3.1.0)
 [![Tests](https://img.shields.io/badge/tests-Playwright%20E2E-blue.svg)](tests/)
 [![Licence](https://img.shields.io/badge/licence-MIT-green.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-enabled-purple.svg)](mcp-server/README.md)
@@ -343,15 +343,15 @@ Explore all PortPilot features including app management, the Active Ports scanne
 
 ### Download (Recommended)
 
-**Latest Release: v3.0.0**
+**Latest Release: v3.1.0**
 
 **Windows:**
-- [PortPilot-3.0.0-x64.exe](https://github.com/m4cd4r4/PortPilot/releases/download/v3.0.0/PortPilot-3.0.0-x64.exe) - NSIS Installer (~72 MB)
-- [PortPilot-3.0.0-portable.exe](https://github.com/m4cd4r4/PortPilot/releases/download/v3.0.0/PortPilot-3.0.0-portable.exe) - Portable (~72 MB)
+- [PortPilot-3.1.0-x64.exe](https://github.com/m4cd4r4/PortPilot/releases/download/v3.1.0/PortPilot-3.1.0-x64.exe) - NSIS Installer (~72 MB)
+- [PortPilot-3.1.0-portable.exe](https://github.com/m4cd4r4/PortPilot/releases/download/v3.1.0/PortPilot-3.1.0-portable.exe) - Portable (~72 MB)
 
 **Linux:**
-- [PortPilot-3.0.0-x86_64.AppImage](https://github.com/m4cd4r4/PortPilot/releases/download/v3.0.0/PortPilot-3.0.0-x86_64.AppImage) - AppImage (~98 MB)
-- [PortPilot-3.0.0-amd64.deb](https://github.com/m4cd4r4/PortPilot/releases/download/v3.0.0/PortPilot-3.0.0-amd64.deb) - Debian/Ubuntu (~69 MB)
+- [PortPilot-3.1.0-x86_64.AppImage](https://github.com/m4cd4r4/PortPilot/releases/download/v3.1.0/PortPilot-3.1.0-x86_64.AppImage) - AppImage (~98 MB)
+- [PortPilot-3.1.0-amd64.deb](https://github.com/m4cd4r4/PortPilot/releases/download/v3.1.0/PortPilot-3.1.0-amd64.deb) - Debian/Ubuntu (~69 MB)
 
 **macOS:**
 - Build from source (see below) - macOS is supported but not officially tested
@@ -647,7 +647,12 @@ started processes separately).
 
 ## Version History
 
-### v3.0.0 (2026-06-08) - Current Release
+### v3.1.0 (2026-06-08) - Current Release
+- Web portal hosted from VS Code - the extension runs the browser UI itself (opt-in `portpilot.webPortal.enabled`), no desktop app needed
+- Spawns the hardened loopback agent with the editor's own Node; "PP Portal" status-bar item; graceful IPC shutdown (works on Windows); self-exits if the editor host closes
+- Opt-in `portpilot.webPortal.stopAppsOnStop` to also stop the dev servers the portal started
+
+### v3.0.0 (2026-06-08)
 - Web Agent - run PortPilot in the browser (`npm run agent` or the in-app Web Access toggle), shared in-process with the desktop app
 - SSE live updates, auto-port-fallback, and a hardened loopback security model (token, Host/Origin allowlists, locked CORS, strict CSP) - see SECURITY.md
 - All clients aligned on one config path and the same two-phase running detection (apps on dynamic ports now detected)
