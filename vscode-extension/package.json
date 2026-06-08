@@ -2,7 +2,7 @@
   "name": "portpilot",
   "displayName": "PortPilot",
   "description": "Manage localhost dev servers and ports from the VS Code sidebar",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "publisher": "macdara",
   "engines": {
     "vscode": "^1.85.0"
@@ -111,8 +111,41 @@
         "title": "Delete All Apps",
         "icon": "$(clear-all)",
         "category": "PortPilot"
+      },
+      {
+        "command": "portpilot.startWebPortal",
+        "title": "Start Web Portal",
+        "icon": "$(broadcast)",
+        "category": "PortPilot"
+      },
+      {
+        "command": "portpilot.stopWebPortal",
+        "title": "Stop Web Portal",
+        "icon": "$(debug-stop)",
+        "category": "PortPilot"
+      },
+      {
+        "command": "portpilot.openWebPortal",
+        "title": "Open Web Portal in Browser",
+        "icon": "$(globe)",
+        "category": "PortPilot"
       }
     ],
+    "configuration": {
+      "title": "PortPilot",
+      "properties": {
+        "portpilot.webPortal.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run the PortPilot web portal (browser UI, loopback-only + token-gated) whenever this window is open. Opt-in; off by default."
+        },
+        "portpilot.webPortal.stopAppsOnStop": {
+          "type": "boolean",
+          "default": false,
+          "description": "When the web portal stops, also stop the dev servers it started. Off by default, so dev servers keep running across portal restarts."
+        }
+      }
+    },
     "menus": {
       "view/title": [
         {
@@ -191,9 +224,11 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p ./",
+    "copy-runtime": "node scripts/copy-runtime.js",
+    "vscode:prepublish": "npm run copy-runtime && tsc -p ./",
+    "compile": "npm run copy-runtime && tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "npx @vscode/vsce package --no-dependencies"
+    "package": "npm run copy-runtime && npx @vscode/vsce package --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

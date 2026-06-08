@@ -19,6 +19,7 @@
 ## 📑 Table of Contents
 
 - [✨ AI Agent Integration](#-ai-agent-integration)
+- [What's New in v3.1.0](#whats-new-in-v310)
 - [What's New in v3.0.0](#whats-new-in-v300)
 - [What's New in v2.0.0](#whats-new-in-v200)
 - [What's New in v1.7.0](#whats-new-in-v170)
@@ -49,6 +50,15 @@ Control PortPilot with natural language! Works with Claude Code, Cursor, Windsur
 ```
 
 **[→ Setup MCP Integration](mcp-server/README.md)**
+
+## What's New in v3.1.0
+
+### Web portal, hosted from VS Code
+
+- Run the web portal **from the VS Code extension** - no desktop app needed. Enable `portpilot.webPortal.enabled` (opt-in, off by default) and the browser UI is available whenever the editor window is open.
+- A **"PP Portal"** status-bar item shows it running; click to open `http://127.0.0.1:<port>/`. There are `PortPilot: Start / Stop Web Portal` commands too.
+- The extension spawns the same hardened loopback agent (`127.0.0.1`-only, per-session token) using the editor's own Node, and stops it gracefully over an IPC channel - so it works on Windows and the agent does not orphan if the editor closes.
+- Optional `portpilot.webPortal.stopAppsOnStop` also stops the dev servers the portal started when you stop the portal.
 
 ## What's New in v3.0.0
 

@@ -5,6 +5,12 @@ All notable changes to PortPilot will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-06-08
+
+### Added
+- **Web portal, hosted from VS Code** - the VS Code extension can now host the web portal itself via `portpilot.webPortal.enabled` (opt-in, off by default). The browser UI runs whenever the editor window is open, with no desktop app: the extension spawns the hardened loopback agent using the editor's own Node and shows a "PP Portal" status-bar item that opens it. Stopping is graceful over an IPC channel (signals are unreliable on Windows), and the agent self-exits if the editor host closes, so it does not orphan.
+- **`portpilot.webPortal.stopAppsOnStop`** (opt-in, off by default) - when the portal stops, also stop the dev servers it started.
+
 ## [3.0.0] - 2026-06-08
 
 ### Added
