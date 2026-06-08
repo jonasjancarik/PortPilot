@@ -6,6 +6,9 @@ test-results/
 .env
 .env.local
 
+# Demo GIF build intermediates (regeneratable from ffmpeg)
+docs/gif-frames/
+
 # Marketing materials (keep local)
 LINKEDIN_TWITTER_POSTS.md
 REDDIT_LAUNCH_POSTS.md
