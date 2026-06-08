@@ -34,6 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.scanPorts = scanPorts;
+exports.computeRunning = computeRunning;
 exports.killPort = killPort;
 const child_process_1 = require("child_process");
 const util_1 = require("util");
@@ -169,6 +170,102 @@ async function scanLinux() {
 }
 function dedupe(ports) {
     return [...new Map(ports.map(p => [p.port, p])).values()].sort((a, b) => a.port - b.port);
+}
+/** Resolve PID -> command line for a set of PIDs (used for accurate matching). */
+async function getCommandLines(pids) {
+    const map = new Map();
+    if (!pids.length)
+        return map;
+    const platform = os.platform();
+    try {
+        if (platform === 'win32') {
+            const filter = pids.map(p => `ProcessId=${p}`).join(' or ');
+            const { stdout } = await execAsync(`powershell -NoProfile -NonInteractive -Command ` +
+                `"Get-CimInstance Win32_Process -Filter '${filter}' | ` +
+                `Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"`, { encoding: 'utf-8', timeout: 15000, maxBuffer: 8 * 1024 * 1024 });
+            let data = JSON.parse(stdout);
+            if (!Array.isArray(data))
+                data = [data];
+            for (const proc of data) {
+                const pid = parseInt(proc.ProcessId, 10);
+                if (pid)
+                    map.set(pid, proc.CommandLine || '');
+            }
+        }
+        else {
+            const { stdout } = await execAsync(`ps -o pid=,command= -p ${pids.join(',')}`, {
+                encoding: 'utf-8', timeout: 10000, maxBuffer: 8 * 1024 * 1024,
+            });
+            for (const line of stdout.split('\n')) {
+                const m = line.trim().match(/^(\d+)\s+(.*)$/);
+                if (m)
+                    map.set(parseInt(m[1], 10), m[2]);
+            }
+        }
+    }
+    catch {
+        /* command lines optional - matching falls back to preferredPort */
+    }
+    return map;
+}
+/**
+ * Map each app -> the port it's actually running on.
+ *
+ * Mirrors the desktop app and MCP server's two-phase logic so apps without a
+ * preferredPort, or running on a dynamic port, are still detected. The old
+ * extension code matched only an exact preferredPort, so an app started on any
+ * other port always read "stopped" and showed its configured port instead of
+ * the live one.
+ */
+async function computeRunning(apps, activePorts) {
+    const pids = [...new Set(activePorts.map(p => p.pid).filter(Boolean))];
+    const cmds = await getCommandLines(pids);
+    const ports = activePorts.map(p => ({ ...p, commandLine: cmds.get(p.pid) || '' }));
+    const matched = new Set();
+    const result = new Map();
+    // Phase 1: high-confidence CWD match in the command line, then folder/name
+    // keyword evidence on any still-unmatched port.
+    for (const app of apps) {
+        if (!app.cwd)
+            continue;
+        const cwd = app.cwd.toLowerCase();
+        const cwdAlt = cwd.replace(/\\/g, '/');
+        for (const p of ports) {
+            if (matched.has(p.port))
+                continue;
+            const cl = p.commandLine.toLowerCase();
+            if (cl && (cl.includes(cwd) || cl.includes(cwdAlt))) {
+                result.set(app.id, p);
+                matched.add(p.port);
+                break;
+            }
+        }
+        if (result.has(app.id))
+            continue;
+        const folder = cwd.split(/[\\/]/).filter(Boolean).pop() || '';
+        const keywords = [folder, ...app.name.toLowerCase().split(/[^a-z0-9]+/)].filter(k => k.length > 3);
+        for (const p of ports) {
+            if (matched.has(p.port))
+                continue;
+            const cl = p.commandLine.toLowerCase();
+            if (cl && keywords.some(k => cl.includes(k))) {
+                result.set(app.id, p);
+                matched.add(p.port);
+                break;
+            }
+        }
+    }
+    // Phase 2: explicit preferredPort match (config is a strong signal).
+    for (const app of apps) {
+        if (result.has(app.id) || !app.preferredPort)
+            continue;
+        const p = ports.find(x => x.port === app.preferredPort);
+        if (!p || matched.has(p.port))
+            continue;
+        result.set(app.id, p);
+        matched.add(p.port);
+    }
+    return result;
 }
 /**
  * Kill whatever is listening on a port.

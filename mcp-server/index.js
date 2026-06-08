@@ -348,7 +348,7 @@ function stopApp(app) {
 
 const server = new McpServer({
   name: 'portpilot',
-  version: '2.0.0',
+  version: '3.0.0',
 });
 
 // --- Status ---

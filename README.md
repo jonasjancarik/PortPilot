@@ -6,7 +6,7 @@
 
 **[MCP Integration Setup](mcp-server/README.md)**
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/m4cd4r4/PortPilot/releases/tag/v2.0.0)
+[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](https://github.com/m4cd4r4/PortPilot/releases/tag/v3.0.0)
 [![Tests](https://img.shields.io/badge/tests-Playwright%20E2E-blue.svg)](tests/)
 [![Licence](https://img.shields.io/badge/licence-MIT-green.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-enabled-purple.svg)](mcp-server/README.md)
@@ -18,6 +18,7 @@
 ## 📑 Table of Contents
 
 - [✨ AI Agent Integration](#-ai-agent-integration)
+- [What's New in v3.0.0](#whats-new-in-v300)
 - [What's New in v2.0.0](#whats-new-in-v200)
 - [What's New in v1.7.0](#whats-new-in-v170)
 - [Features](#features)
@@ -47,6 +48,22 @@ Control PortPilot with natural language! Works with Claude Code, Cursor, Windsur
 ```
 
 **[→ Setup MCP Integration](mcp-server/README.md)**
+
+## What's New in v3.0.0
+
+### Web Agent - PortPilot in your browser
+
+- Run the full UI in a browser with no Electron, via `npm run agent` or the opt-in **Web Access** toggle in Settings
+- Embedded in the desktop app it runs in-process, sharing the same config and process table, so apps started in the browser and on the desktop are the same
+- Live updates over SSE - external MCP edits push to the browser instantly
+- Hardened loopback security: `127.0.0.1`-only, per-session token, Host/Origin allowlists, locked CORS, strict CSP. Full threat model in [SECURITY.md](SECURITY.md)
+- Auto-picks a free port if 7317 is taken
+
+### All clients aligned
+
+- The desktop app, MCP server, VS Code extension, and web agent now share one config path and the same **two-phase running detection**, so apps on a dynamic or non-preferred port are detected instead of reading "stopped"
+- Dropped the deprecated `wmic` for PowerShell/CIM plus a batched `tasklist` lookup
+- Fixed config data loss when editing MCP-added apps, and made `killPort` locale-independent across clients
 
 ## What's New in v2.0.0
 
@@ -315,15 +332,15 @@ Explore all PortPilot features including app management, the Active Ports scanne
 
 ### Download (Recommended)
 
-**Latest Release: v2.0.0**
+**Latest Release: v3.0.0**
 
 **Windows:**
-- [PortPilot-2.0.0-x64.exe](https://github.com/m4cd4r4/PortPilot/releases/download/v2.0.0/PortPilot-2.0.0-x64.exe) - NSIS Installer (~72 MB)
-- [PortPilot-2.0.0-portable.exe](https://github.com/m4cd4r4/PortPilot/releases/download/v2.0.0/PortPilot-2.0.0-portable.exe) - Portable (~72 MB)
+- [PortPilot-3.0.0-x64.exe](https://github.com/m4cd4r4/PortPilot/releases/download/v3.0.0/PortPilot-3.0.0-x64.exe) - NSIS Installer (~72 MB)
+- [PortPilot-3.0.0-portable.exe](https://github.com/m4cd4r4/PortPilot/releases/download/v3.0.0/PortPilot-3.0.0-portable.exe) - Portable (~72 MB)
 
 **Linux:**
-- The v2.0.0 release currently ships Windows installers only. Build the Linux
-  AppImage/.deb from source with `npm run build:linux` (see [Build from Source](#build-from-source)).
+- [PortPilot-3.0.0-x86_64.AppImage](https://github.com/m4cd4r4/PortPilot/releases/download/v3.0.0/PortPilot-3.0.0-x86_64.AppImage) - AppImage (~98 MB)
+- [PortPilot-3.0.0-amd64.deb](https://github.com/m4cd4r4/PortPilot/releases/download/v3.0.0/PortPilot-3.0.0-amd64.deb) - Debian/Ubuntu (~69 MB)
 
 **macOS:**
 - Build from source (see below) - macOS is supported but not officially tested
@@ -619,7 +636,15 @@ started processes separately).
 
 ## Version History
 
-### v2.0.0 (2026-04-14) - Current Release
+### v3.0.0 (2026-06-08) - Current Release
+- Web Agent - run PortPilot in the browser (`npm run agent` or the in-app Web Access toggle), shared in-process with the desktop app
+- SSE live updates, auto-port-fallback, and a hardened loopback security model (token, Host/Origin allowlists, locked CORS, strict CSP) - see SECURITY.md
+- All clients aligned on one config path and the same two-phase running detection (apps on dynamic ports now detected)
+- Dropped deprecated wmic for PowerShell/CIM + tasklist; locale-independent killPort across clients
+- Fixed config data loss on MCP-added apps; VS Code extension now matches the desktop app's running detection
+- App log viewer (desktop), opt-in window auto-resize, app-card accessibility
+
+### v2.0.0 (2026-04-14)
 - Full UI redesign - single-pane layout replaces 4-tab system
 - Settings moved to slide-out panel with backdrop blur
 - Knowledge tab removed (docs moved to GitHub wiki)

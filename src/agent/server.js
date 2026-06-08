@@ -177,14 +177,17 @@ function openBrowser(url) {
 // ---- Standalone CLI ----
 async function main() {
   const { ConfigStore } = require('../main/configStore');
+  const { findAvailablePort } = require('../main/portScanner');
   const configStore = new ConfigStore(null);
-  const agent = createAgent({ configStore });
+  // Auto-pick a free port from the default up so a busy 7317 doesn't error out.
+  const port = (await findAvailablePort(DEFAULT_PORT)) || DEFAULT_PORT;
+  const agent = createAgent({ configStore, port });
   let started;
   try {
     started = await agent.start();
   } catch (err) {
     if (err.code === 'EADDRINUSE') {
-      console.error(`Port ${DEFAULT_PORT} is already in use. Set PORTPILOT_AGENT_PORT to choose another.`);
+      console.error(`Port ${port} is already in use. Set PORTPILOT_AGENT_PORT to choose another.`);
       process.exit(1);
     }
     throw err;

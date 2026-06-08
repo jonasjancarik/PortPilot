@@ -177,8 +177,13 @@ if (!gotTheLock) {
     ipcMain.handle('agent:start', async () => {
       try {
         if (webAgent) return { success: true, ...webAgent.getInfo() };
-        const { createAgent } = require('../agent/server');
-        webAgent = createAgent({ configStore });
+        const { createAgent, DEFAULT_PORT } = require('../agent/server');
+        const { findAvailablePort } = require('./portScanner');
+        // Auto-pick a free port from the default up, so a busy 7317 (e.g. a
+        // standalone agent) doesn't dead-end the toggle. The returned info
+        // carries the real URL, which the renderer shows.
+        const port = (await findAvailablePort(DEFAULT_PORT)) || DEFAULT_PORT;
+        webAgent = createAgent({ configStore, port });
         const info = await webAgent.start();
         return { success: true, ...info };
       } catch (err) {

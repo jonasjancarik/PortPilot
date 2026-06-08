@@ -25,9 +25,9 @@ export function activate(context: vscode.ExtensionContext) {
   function updateStatusBar() {
     const ports = portsProvider.getCachedPorts();
     const config = readConfig();
-    const runningCount = config.apps.filter(
-      (a: PortPilotApp) => a.preferredPort && ports.some(p => p.port === a.preferredPort)
-    ).length;
+    // Use the same two-phase matcher as the apps tree so the count reflects apps
+    // running on a dynamic port, not just those on their exact preferredPort.
+    const runningCount = appsProvider.getRunningByAppId().size;
     statusBar.text = `$(plug) PP: ${runningCount} running`;
     statusBar.tooltip = `PortPilot - ${config.apps.length} apps, ${runningCount} running, ${ports.length} ports`;
   }
@@ -45,7 +45,7 @@ export function activate(context: vscode.ExtensionContext) {
   async function refreshAll() {
     // Single async scan shared with both providers (no UI-thread blocking).
     await portsProvider.refresh();
-    appsProvider.setActivePorts(portsProvider.getCachedPorts());
+    await appsProvider.setActivePorts(portsProvider.getCachedPorts());
     updateStatusBar();
   }
 
