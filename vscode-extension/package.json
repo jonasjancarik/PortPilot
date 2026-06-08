@@ -225,6 +225,7 @@
   },
   "scripts": {
     "copy-runtime": "node scripts/copy-runtime.js",
+    "vscode:prepublish": "npm run copy-runtime && tsc -p ./",
     "compile": "npm run copy-runtime && tsc -p ./",
     "watch": "tsc -watch -p ./",
     "package": "npm run copy-runtime && npx @vscode/vsce package --no-dependencies"

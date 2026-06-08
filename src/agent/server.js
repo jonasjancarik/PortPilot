@@ -211,18 +211,35 @@ async function main() {
 
   if (!process.env.PORTPILOT_NO_OPEN && !process.argv.includes('--no-open')) openBrowser(started.url);
 
-  const shutdown = () => {
-    try { fs.rmSync(path.join(getConfigDir(), 'agent.json'), { force: true }); } catch { /* ignore */ }
+  const agentJson = path.join(getConfigDir(), 'agent.json');
+  // Sync best-effort removal on any normal process exit. Covers Windows, where a
+  // force-terminate (TerminateProcess) skips the async handlers below.
+  process.on('exit', () => { try { fs.rmSync(agentJson, { force: true }); } catch { /* ignore */ } });
+
+  let shuttingDown = false;
+  const shutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    // Hard exit even if cleanup hangs, so a stop never wedges the process.
+    setTimeout(() => process.exit(0), 3000).unref();
+    try { fs.rmSync(agentJson, { force: true }); } catch { /* ignore */ }
     // Opt-in: also stop the dev servers this agent started (mirrors the desktop
     // app's stopAppsOnQuit). Off by default, so dev servers survive a portal stop.
     if (process.env.PORTPILOT_STOP_APPS_ON_EXIT === '1') {
-      try { require('../main/processManager').cleanupAllProcesses(); } catch { /* ignore */ }
+      try { await require('../main/processManager').cleanupAllProcesses(); } catch { /* ignore */ }
     }
-    agent.stop().then(() => process.exit(0));
-    setTimeout(() => process.exit(0), 1000).unref();
+    try { await agent.stop(); } catch { /* ignore */ }
+    process.exit(0);
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+  // When embedded by the VS Code extension we are spawned with an IPC channel.
+  // SIGTERM is not a real signal on Windows (it force-terminates without running
+  // the handler), so the extension sends a 'shutdown' message for a graceful
+  // stop that honours PORTPILOT_STOP_APPS_ON_EXIT. 'disconnect' fires if the
+  // parent (the extension host) dies, so we self-exit instead of orphaning.
+  process.on('message', (m) => { if (m && m.type === 'shutdown') void shutdown(); });
+  process.on('disconnect', () => void shutdown());
 }
 
 module.exports = { createAgent, openBrowser, DEFAULT_PORT };
