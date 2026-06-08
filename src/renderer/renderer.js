@@ -252,6 +252,7 @@ function setupDelegation() {
     openProcessFolder: el => openProcessFolder(el.dataset.path),
     copyPort: el => copyPort(+el.dataset.port),
     killPort: el => killPort(+el.dataset.port),
+    adoptPort: el => adoptPort(+el.dataset.port),
     toggleSection: el => toggleSection(el.dataset.section),
     togglePortGroup: el => togglePortGroup(el.dataset.portgroup),
     toggleGroup: el => toggleGroup(el.dataset.group),
@@ -568,21 +569,24 @@ function renderPortGroup(key, meta, rows) {
         <span class="section-count">${rows.length}</span>
       </div>
       <div class="port-group-rows ${expanded ? '' : 'collapsed'}">
-        ${rows.map(renderPortRow).join('')}
+        ${rows.map(p => renderPortRow(p, key)).join('')}
       </div>
     </div>`;
 }
 
-function renderPortRow(p) {
+function renderPortRow(p, group) {
   const S = window.PortPilotStatus;
   // Active listening ports are, by definition, running. Other states
-  // (conflict / error / starting) arrive in later phases once apps are merged.
+  // (conflict / error / starting) arrive once apps are merged in.
   const status = S.statusOf({ running: true });
   const proc = p.processName || 'Unknown';
   const cmdLine = p.commandLine || '';
   const exePath = extractExePath(cmdLine);
   const addr = p.address || '';
   const exposed = addr && !(addr.includes('127.0.0.1') || addr.includes('[::1]') || addr.includes('localhost'));
+  // Adopt promotes an unregistered running port into a managed app. System
+  // ports (svchost et al) are never adoption candidates.
+  const canAdopt = group !== 'system';
 
   return `
     <div class="port-row" data-port="${p.port}">
@@ -595,12 +599,32 @@ function renderPortRow(p) {
       <span class="port-cmd" title="${escapeHtml(cmdLine)}">${escapeHtml(cmdLine)}</span>
       <span class="port-pid" title="PID ${p.pid || ''}">${p.pid || ''}</span>
       <span class="port-row-actions">
+        ${canAdopt ? `<button class="btn btn-small btn-secondary" data-act="adoptPort" data-port="${p.port}" title="Adopt as app">${icon('plus', 12)}</button>` : ''}
         <button class="btn btn-small btn-secondary" data-act="openPortInBrowser" data-port="${p.port}" title="Open in browser">${icon('browser', 12)}</button>
         ${exePath ? `<button class="btn btn-small btn-secondary" data-act="openProcessFolder" data-path="${escapeHtml(exePath)}" title="Open folder">${icon('folder', 12)}</button>` : ''}
         <button class="btn btn-small btn-secondary" data-act="copyPort" data-port="${p.port}" title="Copy localhost:${p.port}">${icon('copy', 12)}</button>
         <button class="btn btn-small btn-danger" data-act="killPort" data-port="${p.port}" title="Kill process">${icon('kill', 12)}</button>
       </span>
     </div>`;
+}
+
+// Adopt an unregistered running port as a managed app: open the Add App modal
+// pre-filled with the port and its running command, so the user can refine the
+// start command / working directory and save. Once registered, the port will
+// match the app and move up into the Apps section on the next scan.
+function adoptPort(portNum) {
+  const p = state.ports.find(x => x.port === portNum);
+  if (!p) return;
+  openAppModal();
+  document.getElementById('app-name').value = guessAdoptName(p);
+  document.getElementById('app-command').value = p.commandLine || '';
+  document.getElementById('app-port').value = p.port;
+  showToast('Review the command and set a working directory before saving', 'info');
+}
+
+function guessAdoptName(p) {
+  const base = String(p.processName || 'app').replace(/\.(exe|app|bin)$/i, '');
+  return base ? base.charAt(0).toUpperCase() + base.slice(1) : 'New app';
 }
 
 async function killPort(port) {

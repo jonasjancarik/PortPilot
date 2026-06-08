@@ -7,19 +7,26 @@
  * Output: docs/ui-redesign/phase1-*.png
  */
 const { _electron: electron } = require('playwright');
+const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 const OUT = path.join(ROOT, 'docs', 'ui-redesign');
+// Isolated, throwaway config so this never mutates the user's real settings
+// (toggling a group persists; without isolation it would pollute %APPDATA%).
+const USER_DATA = path.join(ROOT, 'test-results', 'visual-userdata');
 
 (async () => {
   const errors = [];
+  fs.rmSync(USER_DATA, { recursive: true, force: true });
+  fs.mkdirSync(USER_DATA, { recursive: true });
   // --remote-debugging-port puts the app in test mode (bypasses the
   // single-instance lock, so this won't fight a PortPilot the user already has
-  // open). ELECTRON_RUN_AS_NODE must be unset or Electron runs headless as Node.
+  // open). --user-data-dir isolates config. ELECTRON_RUN_AS_NODE must be unset
+  // or Electron runs headless as Node.
   const app = await electron.launch({
     executablePath: require('electron'),
-    args: [ROOT, '--remote-debugging-port=9333'],
+    args: [ROOT, '--remote-debugging-port=9333', `--user-data-dir=${USER_DATA}`],
     env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined },
   });
   const win = await app.firstWindow();
@@ -66,17 +73,53 @@ const OUT = path.join(ROOT, 'docs', 'ui-redesign');
   });
   console.log('render stats:', JSON.stringify(stats, null, 2));
 
-  await win.screenshot({ path: path.join(OUT, 'phase1-window.png') });
-  const section = await win.$('#ports-section');
-  if (section) await section.screenshot({ path: path.join(OUT, 'phase1-ports-default.png') });
+  // Phase 2: adopt-as-app affordance should appear on dev + other rows, never system.
+  const adopt = await win.evaluate(() => {
+    const groupAdopts = (key) => {
+      const g = document.querySelector(`.port-group[data-portgroup="${key}"]`);
+      return g ? g.querySelectorAll('[data-act="adoptPort"]').length : 0;
+    };
+    return {
+      total: document.querySelectorAll('[data-act="adoptPort"]').length,
+      dev: groupAdopts('dev'),
+      other: groupAdopts('other'),
+      system: groupAdopts('system'),
+    };
+  });
+  console.log('adopt buttons:', JSON.stringify(adopt));
 
-  // Expand the System group to prove the collapse toggle works, then shoot again.
+  await win.screenshot({ path: path.join(OUT, 'phase2-window.png') });
+  const section = await win.$('#ports-section');
+  if (section) await section.screenshot({ path: path.join(OUT, 'phase2-ports-default.png') });
+
+  // Click a dev-group adopt button and confirm the Add App modal pre-fills.
+  let adoptModal = { opened: false };
+  const firstAdopt = await win.$('.port-group[data-portgroup="dev"] [data-act="adoptPort"]');
+  if (firstAdopt) {
+    await firstAdopt.click();
+    await win.waitForTimeout(300);
+    adoptModal = await win.evaluate(() => ({
+      opened: !document.getElementById('modal-app').classList.contains('hidden'),
+      title: document.getElementById('modal-title')?.textContent || '',
+      port: document.getElementById('app-port')?.value || '',
+      name: document.getElementById('app-name')?.value || '',
+      command: (document.getElementById('app-command')?.value || '').slice(0, 48),
+    }));
+    await win.screenshot({ path: path.join(OUT, 'phase2-adopt-modal.png') });
+    const closeBtn = await win.$('#modal-close');
+    if (closeBtn) await closeBtn.click();
+    await win.waitForTimeout(200);
+  }
+  console.log('adopt modal:', JSON.stringify(adoptModal));
+
+  // Expand the System group to prove the collapse toggle works (and confirm no
+  // adopt buttons there), then shoot again.
   const sysHeader = await win.$('.port-group[data-portgroup="system"] .port-group-header');
   if (sysHeader) {
     await sysHeader.click();
     await win.waitForTimeout(400);
     const section2 = await win.$('#ports-section');
-    if (section2) await section2.screenshot({ path: path.join(OUT, 'phase1-ports-system-expanded.png') });
+    if (section2) await section2.screenshot({ path: path.join(OUT, 'phase2-ports-system-expanded.png') });
   }
 
   console.log('errors:', errors.length ? JSON.stringify(errors, null, 2) : 'none');

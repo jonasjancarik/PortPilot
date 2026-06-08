@@ -68,7 +68,21 @@ Each phase is one shippable PR. Wave gates: finish a wave before scoping the nex
 |---|---|---|---|---|---|
 | 0 | Shared model | all (core) | `classify(port)` + `statusOf(item)` + status CSS variables for all themes. Pure functions, unit-tested. No UI change yet. | S | **done** (2026-06-08) |
 | 1 | Grouped dense table | desktop | Replace the two-column card grid with a single dense table grouped into collapsible counted sections: MY DEV SERVERS (expanded) / OTHER USER PORTS / SYSTEM & OS (collapsed by default). Status dot in a fixed left gutter + state word. `:PORT` as a clickable localhost link. Aligned columns (status / :port / process / pid / command). Summary line "N dev running - N conflict - N total". | M | **done** (2026-06-08) |
-| 2 | Unify apps + ports | desktop | Merge MY APPS into the same surface. A registered app is a row in MY DEV SERVERS showing its live resolved port + uptime when running, or a Start affordance when stopped. Unmatched live ports stay in OTHER/SYSTEM with an "Adopt as app" action. Retire the standalone My Apps tab as a primary destination. | M | later |
+| 2 | Unify apps + ports (revised) | desktop | Adopt-as-app bridge + reframe. See revision note below: the literal merge was dropped after Wave 1 review. | M | **done** (2026-06-08) |
+
+### Phase 2 landed (2026-06-08) - revised scope
+
+Wave 1 review changed this phase. The pre-wave plan assumed apps and ports were split and needed merging into one "My Dev Servers" list. Reading the code showed `renderAppCard` **already** reconciles each app with its live resolved port, status dot, uptime/PID, and start/stop - plus favorites, custom groups, drag-reorder, and multi-select. A literal merge would have to relocate or dumb-down all of that, regressing the apps surface for no real gain. So the literal merge was dropped in favour of the plan's other clause - the genuinely missing capability:
+
+- **Adopt as app**: every unregistered running port in the Dev and Other groups gets a `+` action. It opens the Add App modal pre-filled with the port and the running command (and a name guess), so the user refines the start command / working directory and saves. Once registered, the port matches the app and moves up into the Apps section on the next scan - the adoption *is* the unification, one click at a time. System ports never get adopt.
+- **Reframe**: shared `GROUPS.dev.label` "My Dev Servers" -> "Dev Servers" (the registered ones live in the Apps section above; this group is unregistered dev servers, i.e. the adoption candidates).
+- **Collision fix (Phase 1 debt)**: the new status-dot rules were scoped under `.port-row` so they no longer fight the legacy app-card `.status-dot` rule. Without this, the triangle/circle-x shapes would have broken once conflict/error states render.
+
+Verified via `node tests/visual-ports.js` (now isolated with `--user-data-dir`, so it never mutates real settings): 34 adopt buttons (7 dev + 27 other + 0 system), the adopt click opens a pre-filled "Add App" modal (port 3031, command populated), System collapsed by default, dot count == row count, zero console errors.
+
+If a true single-list merge is ever wanted, it belongs in its own phase with the apps-section groups/favorites/selection machinery moved wholesale - not folded into this one.
+
+**Wave 1 is complete** (Phases 0, 1, 2). Retro the Wave 2 scope below against what shipped before minting it.
 
 ### Wave 2 - depth + polish (scope AFTER Wave 1 ships)
 

@@ -691,8 +691,10 @@ body {
 
 /* ============ Status dots (shared status model) ============ */
 /* Shape carries state alongside colour, so status survives greyscale and
-   colour-blind vision. --dot-color is set per row from a --status-* variable. */
-.status-dot {
+   colour-blind vision. --dot-color is set per row from a --status-* variable.
+   Scoped to .port-row so these do not collide with the legacy app-card
+   .status-dot rule (which is colour-by-class, not shape-based). */
+.port-row .status-dot {
   width: 9px;
   height: 9px;
   flex-shrink: 0;
@@ -700,14 +702,14 @@ body {
   border-radius: 50%;
   background: var(--dot-color, var(--text-muted));
 }
-.status-dot--ring {
+.port-row .status-dot--ring {
   background: transparent;
   border: 1.5px solid var(--dot-color, var(--text-muted));
 }
-.status-dot--disc-pulse {
+.port-row .status-dot--disc-pulse {
   animation: pp-status-pulse 1.3s ease-in-out infinite;
 }
-.status-dot--triangle {
+.port-row .status-dot--triangle {
   width: 0;
   height: 0;
   border-radius: 0;
@@ -716,10 +718,10 @@ body {
   border-right: 5px solid transparent;
   border-bottom: 9px solid var(--dot-color, var(--accent-yellow));
 }
-.status-dot--circle-x {
+.port-row .status-dot--circle-x {
   position: relative;
 }
-.status-dot--circle-x::after {
+.port-row .status-dot--circle-x::after {
   content: '\00d7';
   position: absolute;
   inset: 0;

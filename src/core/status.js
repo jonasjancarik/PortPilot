@@ -48,7 +48,7 @@
 
   // ---- Group model --------------------------------------------------------
   const GROUPS = {
-    dev:    { key: 'dev',    label: 'My Dev Servers',   order: 0, defaultCollapsed: false },
+    dev:    { key: 'dev',    label: 'Dev Servers',      order: 0, defaultCollapsed: false },
     other:  { key: 'other',  label: 'Other User Ports', order: 1, defaultCollapsed: false },
     system: { key: 'system', label: 'System & OS Ports', order: 2, defaultCollapsed: true },
   };
