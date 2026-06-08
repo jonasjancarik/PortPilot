@@ -2,7 +2,7 @@
   "name": "portpilot",
   "displayName": "PortPilot",
   "description": "Manage localhost dev servers and ports from the VS Code sidebar",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "publisher": "macdara",
   "engines": {
     "vscode": "^1.85.0"
@@ -11,6 +11,11 @@
   "activationEvents": [],
   "main": "./out/extension.js",
   "license": "MIT",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/m4cd4r4/PortPilot.git"
+  },
   "contributes": {
     "viewsContainers": {
       "activitybar": [
