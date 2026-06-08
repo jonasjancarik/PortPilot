@@ -56,9 +56,35 @@ jobs:
             dist/*.AppImage
             dist/*.deb
 
+  extension:
+    name: Package VS Code Extension
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build and package extension
+        working-directory: vscode-extension
+        run: |
+          npm install
+          npm run compile
+          npx @vscode/vsce package --no-dependencies
+
+      - name: Upload extension artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-extension
+          path: vscode-extension/*.vsix
+
   release:
     name: Create Release
-    needs: build
+    needs: [build, extension]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -79,6 +105,12 @@ jobs:
           name: linux-builds
           path: dist/
 
+      - name: Download VS Code extension
+        uses: actions/download-artifact@v4
+        with:
+          name: vscode-extension
+          path: dist/
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -87,6 +119,7 @@ jobs:
             dist/PortPilot-*-portable.exe
             dist/PortPilot-*-x86_64.AppImage
             dist/PortPilot-*-amd64.deb
+            dist/portpilot-*.vsix
           draft: false
           prerelease: false
           generate_release_notes: true
