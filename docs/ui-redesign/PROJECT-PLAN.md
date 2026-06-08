@@ -41,6 +41,13 @@ Classification: `classify(port)` -> `dev | other | system`.
 
 Both `classify()` and `statusOf()` live in ONE shared module so desktop, VS Code, and web read identical results. Group-collapse state, pins, and last filter/sort persist in the shared JSON config.
 
+### Phase 0 landed (2026-06-08)
+
+- Module: `src/core/status.js` - UMD (CommonJS `require` for main/agent/tests; `window.PortPilotStatus` global for the renderer, which runs `nodeIntegration:false` and cannot `require`). Exports `classify`, `statusOf`, `STATES`, `GROUPS`, `GROUP_ORDER`.
+- CSS: `--status-running/stopped/starting/conflict/error` added once on `body` in `src/renderer/styles.css`, mapped to each theme's existing accents (resolves per-theme automatically). Inert until Phase 1 draws the dots.
+- Tests: `tests/run-unit.js` (26 cases, no display) via `npm run test:unit`.
+- **Phase 1 wiring note:** the renderer cannot `require`, so add `<script src="../core/status.js"></script>` before `renderer.js` in `index.html`, then call `window.PortPilotStatus.classify(p)` / `.statusOf(...)` inside `renderPorts()`. For the agent/web portal (Phase 7), add `core/status.js` to `vscode-extension/scripts/copy-runtime.js` so it ships in the bundle.
+
 ## Phase / PR breakdown
 
 Each phase is one shippable PR. Wave gates: finish a wave before scoping the next.
@@ -49,7 +56,7 @@ Each phase is one shippable PR. Wave gates: finish a wave before scoping the nex
 
 | # | Phase | Surface | Scope | Effort | Status |
 |---|---|---|---|---|---|
-| 0 | Shared model | all (core) | `classify(port)` + `statusOf(item)` + status CSS variables for all 6 themes. Pure functions, unit-tested. No UI change yet. | S | later |
+| 0 | Shared model | all (core) | `classify(port)` + `statusOf(item)` + status CSS variables for all themes. Pure functions, unit-tested. No UI change yet. | S | **done** (2026-06-08) |
 | 1 | Grouped dense table | desktop | Replace the two-column card grid with a single dense table grouped into collapsible counted sections: MY DEV SERVERS (expanded) / OTHER USER PORTS / SYSTEM & OS (collapsed by default). Status dot in a fixed left gutter + state word. `:PORT` as a clickable localhost link. Aligned columns (status / :port / process / pid / command). Summary line "N dev running - N conflict - N total". | M | later |
 | 2 | Unify apps + ports | desktop | Merge MY APPS into the same surface. A registered app is a row in MY DEV SERVERS showing its live resolved port + uptime when running, or a Start affordance when stopped. Unmatched live ports stay in OTHER/SYSTEM with an "Adopt as app" action. Retire the standalone My Apps tab as a primary destination. | M | later |
 

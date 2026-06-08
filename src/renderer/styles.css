@@ -150,6 +150,20 @@
   --card-border: rgba(255, 255, 255, 0.1);
 }
 
+/* ============ Status model (shared with src/core/status.js) ============ */
+/* Maps the 5-state status model onto each theme's existing accent palette.
+   data-theme lives on <body>, so var(--accent-*) resolves against the active
+   theme automatically - one block covers every theme. Consumed by the
+   redesigned grouped list's status dots. Conflict and starting share a hue but
+   differ by dot SHAPE, so state is never carried by colour alone. */
+body {
+  --status-running:  var(--accent-green);
+  --status-stopped:  var(--text-muted);
+  --status-starting: var(--accent-yellow);
+  --status-conflict: var(--accent-yellow);
+  --status-error:    var(--accent-red);
+}
+
 /* ============ Reset & Base ============ */
 *, *::before, *::after {
   margin: 0;
