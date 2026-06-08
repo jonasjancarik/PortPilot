@@ -5,6 +5,32 @@ All notable changes to PortPilot will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-06-08
+
+### Added
+- **Web Agent (browser access)** - run the full PortPilot UI in a browser with no Electron, via `npm run agent` or the opt-in "Web Access" toggle in Settings. Embedded in the desktop app it runs in-process, sharing the same config and process table, so apps started in the browser and on the desktop are the same.
+- **SSE live updates** - external config changes (including MCP edits) push to the browser in real time via `/events`.
+- **Auto-port-fallback** - the web agent picks the next free port from 7317 if the default is taken, instead of failing.
+- **App log viewer (desktop)** - running apps get a "logs" button that streams captured stdout/stderr.
+- **6 new MCP tools** - `get_status`, `check_port`, `bulk_start`, `bulk_stop`, `list_groups`, `move_to_group`.
+
+### Changed
+- **Unified config path** across the desktop app, MCP server, VS Code extension, and web agent (shared `core/configPath.js`), so all clients read the same file on every platform.
+- **Two-phase running detection** in every client - apps started on a dynamic or non-preferred port are now detected by command-line CWD match, instead of always reading "stopped".
+- **Honest MCP start/detection** - `start_app` polls for the port before reporting success; `bulk_start` runs concurrently.
+- Dropped `wmic` (deprecated/removed on recent Windows 11) for PowerShell/CIM plus a single batched `tasklist` lookup.
+- Window auto-resize is now opt-in (Settings), default off.
+
+### Fixed
+- **Config data loss** - editing or starring an MCP-added app no longer drops fields like `description` and `startupDelay` (`saveApp` now merges onto the existing record).
+- **Locale-independent `killPort`** in the MCP server and VS Code extension (the "LISTENING" match failed on non-English Windows).
+- **VS Code extension running detection** - the apps tree and "PP: N running" counter now use the same two-phase matcher as the desktop app, so an app on a non-preferred port shows its live port and running state.
+- Live auto-scan (desktop) now honours the `autoScan`/`scanInterval` settings instead of scanning only once at startup.
+
+### Security
+- **Hardened loopback web agent** - binds `127.0.0.1` only, per-session 256-bit token (constant-time check), Host-header allowlist (DNS-rebinding defence), Origin allowlist + locked CORS, preflight-forcing custom header, 1 MB body cap, path-traversal guard, and `agent.json` written `chmod 600`. Full threat model in `SECURITY.md`.
+- **Strict CSP** - removed `script-src 'unsafe-inline'` by converting the inline handlers to delegated `data-act` listeners, closing the main XSS to code-execution vector.
+
 ## [2.0.0] - 2026-04-14
 
 ### Added

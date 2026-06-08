@@ -21,12 +21,16 @@ import os from 'os';
 function getConfigPath() {
   const platform = os.platform();
   let configDir;
+  // NOTE: must match Electron's app.getPath('userData'), which is derived from
+  // the lowercase package.json "name" ("portpilot"). Using "PortPilot" (capital)
+  // here works on case-insensitive Windows but reads a DIFFERENT file on
+  // Linux/macOS, so the MCP server would never see the desktop app's config.
   if (platform === 'win32') {
-    configDir = path.join(process.env.APPDATA || '', 'PortPilot');
+    configDir = path.join(process.env.APPDATA || '', 'portpilot');
   } else if (platform === 'darwin') {
-    configDir = path.join(os.homedir(), 'Library', 'Application Support', 'PortPilot');
+    configDir = path.join(os.homedir(), 'Library', 'Application Support', 'portpilot');
   } else {
-    configDir = path.join(os.homedir(), '.config', 'PortPilot');
+    configDir = path.join(os.homedir(), '.config', 'portpilot');
   }
   return path.join(configDir, 'portpilot-config.json');
 }
@@ -57,37 +61,52 @@ function generateId() {
 // PORT SCANNING
 // =============================================================================
 
+function getProcessNamesWindows(pids) {
+  // Single batched PID -> image-name lookup. Replaces a per-PID `wmic` spawn
+  // (slow, and `wmic` is deprecated/removed on recent Windows 11). `tasklist`
+  // image names are locale-independent.
+  const map = new Map();
+  if (pids.length === 0) return map;
+  try {
+    const out = execSync('tasklist /fo csv /nh', { encoding: 'utf-8', timeout: 10000, maxBuffer: 8 * 1024 * 1024 });
+    const wanted = new Set(pids);
+    for (const line of out.split('\n')) {
+      const cols = line.split('","').map(c => c.replace(/^"|"$/g, '').trim());
+      if (cols.length < 2) continue;
+      const pid = parseInt(cols[1], 10);
+      if (wanted.has(pid)) map.set(pid, cols[0]);
+    }
+  } catch { /* names stay Unknown */ }
+  return map;
+}
+
 function scanPorts() {
   const platform = os.platform();
   const ports = [];
 
   try {
     if (platform === 'win32') {
-      const output = execSync('netstat -ano', { encoding: 'utf-8', timeout: 15000 });
+      const output = execSync('netstat -ano', { encoding: 'utf-8', timeout: 15000, maxBuffer: 8 * 1024 * 1024 });
       const lines = output.split('\n').filter(l => /^\s*TCP\b/i.test(l));
 
+      const portToPid = new Map();
       for (const line of lines) {
         const parts = line.trim().split(/\s+/);
         if (parts.length < 5) continue;
-        const localPart = parts[1];
         const foreignPart = parts[2];
-        const pid = parseInt(parts[4], 10);
         if (!foreignPart || !foreignPart.match(/:0$/)) continue;
-        const portMatch = localPart.match(/:(\d+)$/);
+        const portMatch = parts[1].match(/:(\d+)$/);
         if (!portMatch) continue;
         const port = parseInt(portMatch[1]);
-        if (port >= 1024 && port <= 65535) {
-          let processName = 'Unknown';
-          try {
-            const wmicOutput = execSync(
-              `wmic process where ProcessId=${pid} get Name /value`,
-              { encoding: 'utf-8', timeout: 5000 }
-            );
-            const nameMatch = wmicOutput.match(/Name=(.+)/);
-            if (nameMatch) processName = nameMatch[1].trim();
-          } catch { /* ignore */ }
-          ports.push({ port, pid, processName });
+        const pid = parseInt(parts[4], 10);
+        if (port >= 1 && port <= 65535 && !portToPid.has(port)) {
+          portToPid.set(port, pid);
         }
+      }
+
+      const names = getProcessNamesWindows([...new Set(portToPid.values())]);
+      for (const [port, pid] of portToPid) {
+        ports.push({ port, pid, processName: names.get(pid) || 'Unknown' });
       }
     } else if (platform === 'darwin') {
       const output = execSync('lsof -iTCP -sTCP:LISTEN -n -P', { encoding: 'utf-8', timeout: 10000 });
@@ -128,12 +147,12 @@ function killPort(port) {
   const platform = os.platform();
   try {
     if (platform === 'win32') {
-      const output = execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf-8' });
-      const match = output.match(/LISTENING\s+(\d+)/);
-      if (match) {
-        execSync(`taskkill /F /PID ${match[1]}`);
-        return { success: true, pid: parseInt(match[1]) };
-      }
+      // Resolve the PID via the locale-independent scan rather than
+      // `findstr LISTENING`, which fails on non-English Windows.
+      const match = scanPorts().find(p => p.port === port);
+      if (!match || !match.pid) return { success: false, error: 'Port not found' };
+      execSync(`taskkill /F /PID ${match.pid}`);
+      return { success: true, pid: match.pid };
     } else {
       execSync(`lsof -ti:${port} | xargs kill -9`);
       return { success: true };
@@ -141,7 +160,6 @@ function killPort(port) {
   } catch (error) {
     return { success: false, error: error.message };
   }
-  return { success: false, error: 'Port not found' };
 }
 
 // =============================================================================
@@ -152,41 +170,155 @@ function findApp(apps, identifier) {
   return apps.find(a => a.id === identifier || a.name.toLowerCase() === identifier.toLowerCase());
 }
 
+/** Resolve PID -> command line for a set of PIDs (used for accurate matching). */
+function getCommandLines(pids) {
+  const map = new Map();
+  if (!pids.length) return map;
+  const platform = os.platform();
+  try {
+    if (platform === 'win32') {
+      const filter = pids.map(p => `ProcessId=${p}`).join(' or ');
+      const out = execSync(
+        `powershell -NoProfile -NonInteractive -Command ` +
+        `"Get-CimInstance Win32_Process -Filter '${filter}' | ` +
+        `Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"`,
+        { encoding: 'utf-8', timeout: 15000, maxBuffer: 8 * 1024 * 1024 }
+      );
+      let data = JSON.parse(out);
+      if (!Array.isArray(data)) data = [data];
+      for (const proc of data) {
+        const pid = parseInt(proc.ProcessId, 10);
+        if (pid) map.set(pid, proc.CommandLine || '');
+      }
+    } else {
+      const out = execSync(`ps -o pid=,command= -p ${pids.join(',')}`, { encoding: 'utf-8', timeout: 10000, maxBuffer: 8 * 1024 * 1024 });
+      for (const line of out.split('\n')) {
+        const m = line.trim().match(/^(\d+)\s+(.*)$/);
+        if (m) map.set(parseInt(m[1], 10), m[2]);
+      }
+    }
+  } catch { /* command lines optional - matching falls back to port */ }
+  return map;
+}
+
+/**
+ * Map apps -> the port they're actually running on.
+ * Mirrors the desktop app's two-phase logic so apps without a preferredPort, or
+ * running on a dynamic port, are still detected (the old code only matched an
+ * exact preferredPort, so those always read "stopped").
+ */
+function computeRunning(apps, activePorts) {
+  const pids = [...new Set(activePorts.map(p => p.pid).filter(Boolean))];
+  const cmds = getCommandLines(pids);
+  const ports = activePorts.map(p => ({ ...p, commandLine: cmds.get(p.pid) || '' }));
+  const matched = new Set();
+  const result = new Map();
+
+  // Phase 1: high-confidence CWD match in the command line.
+  for (const app of apps) {
+    if (!app.cwd) continue;
+    const cwd = app.cwd.toLowerCase();
+    const cwdAlt = cwd.replace(/\\/g, '/');
+    for (const p of ports) {
+      if (matched.has(p.port)) continue;
+      const cl = p.commandLine.toLowerCase();
+      if (cl && (cl.includes(cwd) || cl.includes(cwdAlt))) {
+        result.set(app.id, p);
+        matched.add(p.port);
+        break;
+      }
+    }
+    if (result.has(app.id)) continue;
+    // Folder-name / app-name keyword evidence on any unmatched port.
+    const folder = cwd.split(/[\\/]/).filter(Boolean).pop() || '';
+    const keywords = [folder, ...app.name.toLowerCase().split(/[^a-z0-9]+/)].filter(k => k.length > 3);
+    for (const p of ports) {
+      if (matched.has(p.port)) continue;
+      const cl = p.commandLine.toLowerCase();
+      if (cl && keywords.some(k => cl.includes(k))) {
+        result.set(app.id, p);
+        matched.add(p.port);
+        break;
+      }
+    }
+  }
+
+  // Phase 2: explicit preferredPort match (config is a strong signal).
+  for (const app of apps) {
+    if (result.has(app.id) || !app.preferredPort) continue;
+    const p = ports.find(x => x.port === app.preferredPort);
+    if (!p || matched.has(p.port)) continue;
+    result.set(app.id, p);
+    matched.add(p.port);
+  }
+
+  return result;
+}
+
 function getRunningStatus(apps, activePorts) {
+  const running = computeRunning(apps, activePorts);
   return apps.map(app => {
-    const portInfo = app.preferredPort ? activePorts.find(p => p.port === app.preferredPort) : null;
+    const p = running.get(app.id) || null;
     return {
       id: app.id,
       name: app.name,
       command: app.command,
       cwd: app.cwd,
       preferredPort: app.preferredPort,
+      detectedPort: p ? p.port : null,
       isFavorite: app.isFavorite,
       autoStart: app.autoStart,
       group: app.group || null,
       description: app.description || null,
-      running: !!portInfo,
-      pid: portInfo?.pid || null,
-      processName: portInfo?.processName || null
+      running: !!p,
+      pid: p?.pid || null,
+      processName: p?.processName || null
     };
   });
 }
 
+/**
+ * Start an app and report an HONEST result. When the app has a preferredPort we
+ * poll for it to come up (so a command that fails immediately reports failure
+ * instead of a misleading success). Without a port we can only confirm the
+ * shell spawned, and say so.
+ */
 function startApp(app) {
-  try {
-    const env = { ...process.env, ...app.env };
-    if (app.preferredPort) env.PORT = String(app.preferredPort);
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (res) => { if (!settled) { settled = true; resolve(res); } };
+    try {
+      const env = { ...process.env, ...app.env };
+      if (app.preferredPort) env.PORT = String(app.preferredPort);
 
-    const options = { cwd: app.cwd, env, detached: true, stdio: 'ignore', shell: true };
-    if (os.platform() === 'win32') {
-      exec(`start /B cmd /c "${app.command}"`, options);
-    } else {
-      exec(`nohup ${app.command} &`, options);
+      const options = { cwd: app.cwd, env, detached: true, stdio: 'ignore', shell: true, windowsHide: true };
+      const child = os.platform() === 'win32'
+        ? exec(`start /B cmd /c "${app.command}"`, options)
+        : exec(`nohup ${app.command} >/dev/null 2>&1 &`, options);
+
+      child.on('error', (err) => done({ success: false, error: err.message }));
+      if (typeof child.unref === 'function') child.unref();
+
+      if (app.preferredPort) {
+        let tries = 0;
+        const iv = setInterval(() => {
+          tries++;
+          if (checkPort(app.preferredPort)) {
+            clearInterval(iv);
+            done({ success: true, verified: true, message: `Started ${app.name}; port ${app.preferredPort} is up` });
+          } else if (tries >= 6) {
+            clearInterval(iv);
+            done({ success: false, verified: true, error: `Started ${app.name} but port ${app.preferredPort} never came up within ~6s - check the command, cwd, or its logs` });
+          }
+        }, 1000);
+      } else {
+        // No port to verify against; just catch an immediate spawn failure.
+        setTimeout(() => done({ success: true, verified: false, message: `Started ${app.name} (unverified - no preferredPort set to confirm it bound)` }), 800);
+      }
+    } catch (error) {
+      done({ success: false, error: error.message });
     }
-    return { success: true, message: `Started ${app.name}` };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
+  });
 }
 
 function stopApp(app) {
@@ -216,7 +348,7 @@ function stopApp(app) {
 
 const server = new McpServer({
   name: 'portpilot',
-  version: '2.0.0',
+  version: '3.0.0',
 });
 
 // --- Status ---
@@ -229,13 +361,13 @@ server.tool(
     const config = readConfig();
     const ports = scanPorts();
     const apps = config.apps || [];
-    const running = apps.filter(a => a.preferredPort && ports.some(p => p.port === a.preferredPort));
+    const running = computeRunning(apps, ports);
     return {
       content: [{
         type: 'text',
         text: JSON.stringify({
           registeredApps: apps.length,
-          runningApps: running.length,
+          runningApps: running.size,
           activePorts: ports.length,
           favorites: apps.filter(a => a.isFavorite).length,
           groups: (config.groups || []).length
@@ -326,7 +458,7 @@ server.tool(
     const config = readConfig();
     const app = findApp(config.apps || [], identifier);
     if (!app) return { content: [{ type: 'text', text: `App not found: ${identifier}` }], isError: true };
-    const result = startApp(app);
+    const result = await startApp(app);
     return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], isError: !result.success };
   }
 );
@@ -363,8 +495,9 @@ server.tool(
     else if (favorites) apps = apps.filter(a => a.isFavorite);
     else return { content: [{ type: 'text', text: 'Specify group or favorites: true' }], isError: true };
 
-    const results = apps.map(a => ({ name: a.name, ...startApp(a) }));
-    return { content: [{ type: 'text', text: JSON.stringify({ started: results.length, results }, null, 2) }] };
+    const results = await Promise.all(apps.map(async a => ({ name: a.name, ...(await startApp(a)) })));
+    const ok = results.filter(r => r.success).length;
+    return { content: [{ type: 'text', text: JSON.stringify({ attempted: results.length, succeeded: ok, results }, null, 2) }] };
   }
 );
 

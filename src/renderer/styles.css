@@ -850,11 +850,11 @@ body {
   50% { opacity: 0.4; }
 }
 
-/* Drag handle */
+/* Drag handle - hidden until the row is hovered/focused to cut clutter */
 .drag-handle {
   color: var(--text-muted);
   cursor: grab;
-  opacity: 0.3;
+  opacity: 0;
   transition: opacity 0.15s;
   flex-shrink: 0;
   display: flex;
@@ -862,17 +862,32 @@ body {
 }
 
 .drag-handle:hover,
-.app-card:hover .drag-handle {
+.app-card:hover .drag-handle,
+.app-card:focus-within .drag-handle {
   opacity: 0.8;
 }
 
-/* App checkbox */
+/* App checkbox - revealed on hover/focus, or kept visible once selected */
 .app-checkbox {
   width: 14px;
   height: 14px;
   cursor: pointer;
   flex-shrink: 0;
   accent-color: var(--accent-primary);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.app-card:hover .app-checkbox,
+.app-card:focus-within .app-checkbox,
+.app-card.selected .app-checkbox {
+  opacity: 1;
+}
+
+/* Keyboard focus ring on the card itself */
+.app-card:focus-visible {
+  outline: 2px solid var(--accent-cyan);
+  outline-offset: 1px;
 }
 
 /* App name area */
@@ -1542,4 +1557,109 @@ body {
 /* ============ Hidden ============ */
 .hidden {
   display: none !important;
+}
+
+/* ============ Logs Viewer ============ */
+.modal-logs {
+  width: min(900px, 92vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.logs-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  margin-right: 10px;
+}
+
+.logs-autoscroll-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.logs-body {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  min-height: 200px;
+}
+
+.logs-pre {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--bg-primary, #0d0d12);
+  border: var(--border-width) solid var(--card-border);
+  border-radius: var(--radius);
+  font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+  max-height: 46vh;
+  min-height: 120px;
+}
+
+.logs-pre-err {
+  color: var(--accent-red);
+  max-height: 26vh;
+  min-height: 0;
+}
+
+.logs-section-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-red);
+  opacity: 0.85;
+  margin-bottom: 2px;
+}
+
+/* ============ Web Agent (Option C) ============ */
+.preview-tag {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--accent-purple);
+  color: var(--bg-primary);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  vertical-align: middle;
+  margin-left: 6px;
+}
+
+.web-agent-info {
+  margin-top: 8px;
+  padding: 10px;
+  background: var(--bg-tertiary);
+  border: var(--border-width) solid var(--card-border);
+  border-radius: var(--radius);
+}
+
+.web-agent-info code {
+  display: block;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.78rem;
+  color: var(--accent-cyan);
+  margin-bottom: 8px;
+  word-break: break-all;
+}
+
+.web-agent-note {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-top: 8px;
+  line-height: 1.4;
 }

@@ -25,9 +25,9 @@ export function activate(context: vscode.ExtensionContext) {
   function updateStatusBar() {
     const ports = portsProvider.getCachedPorts();
     const config = readConfig();
-    const runningCount = config.apps.filter(
-      (a: PortPilotApp) => a.preferredPort && ports.some(p => p.port === a.preferredPort)
-    ).length;
+    // Use the same two-phase matcher as the apps tree so the count reflects apps
+    // running on a dynamic port, not just those on their exact preferredPort.
+    const runningCount = appsProvider.getRunningByAppId().size;
     statusBar.text = `$(plug) PP: ${runningCount} running`;
     statusBar.tooltip = `PortPilot - ${config.apps.length} apps, ${runningCount} running, ${ports.length} ports`;
   }
@@ -42,14 +42,15 @@ export function activate(context: vscode.ExtensionContext) {
   watcher.onDidCreate(() => refreshAll());
   context.subscriptions.push(watcher);
 
-  function refreshAll() {
-    portsProvider.refresh();
-    appsProvider.setActivePorts(portsProvider.getCachedPorts());
+  async function refreshAll() {
+    // Single async scan shared with both providers (no UI-thread blocking).
+    await portsProvider.refresh();
+    await appsProvider.setActivePorts(portsProvider.getCachedPorts());
     updateStatusBar();
   }
 
   // Auto-refresh every 10 seconds
-  const interval = setInterval(() => refreshAll(), 10000);
+  const interval = setInterval(() => { void refreshAll(); }, 10000);
   context.subscriptions.push({ dispose: () => clearInterval(interval) });
 
   // Initial load
@@ -116,11 +117,11 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.window.showWarningMessage(
         `Kill process on port ${port} (${item.activePort.processName})?`,
         'Kill', 'Cancel'
-      ).then(choice => {
+      ).then(async choice => {
         if (choice !== 'Kill') return;
-        if (killPort(port)) {
+        if (await killPort(port)) {
           vscode.window.showInformationMessage(`Killed process on port ${port}`);
-          setTimeout(() => refreshAll(), 1000);
+          setTimeout(() => { void refreshAll(); }, 1000);
         } else {
           vscode.window.showErrorMessage(`Failed to kill port ${port}`);
         }

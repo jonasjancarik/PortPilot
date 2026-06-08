@@ -159,7 +159,7 @@ function scanPortsLinux() {
   });
 }
 
-/** Get process names for Windows PIDs */
+/** Get process names + command lines for Windows PIDs (batched, one spawn) */
 function getProcessNames(portInfos) {
   return new Promise((resolve) => {
     // Collect all PIDs including from bindings
@@ -173,18 +173,83 @@ function getProcessNames(portInfos) {
       }
     }
 
-    // Only keep numeric PIDs to prevent WMI query injection
+    // Only keep numeric PIDs to prevent query injection
     const pids = [...allPids].filter(p => Number.isInteger(p) && p > 0 && p <= 4194304);
     if (pids.length === 0) {
       resolve(portInfos);
       return;
     }
 
-    exec(`wmic process where "ProcessId=${pids.join(' or ProcessId=')}" get ProcessId,Name,CommandLine /format:csv`,
-      { encoding: 'utf8', maxBuffer: 1024 * 1024 },
-      (error, stdout) => {
-        const pidToInfo = new Map();
+    queryWindowsProcessInfo(pids).then((pidToInfo) => {
+      resolve(portInfos.map(info => {
+        // Enrich bindings with process info
+        if (info.bindings) {
+          info.bindings = info.bindings.map(b => ({
+            ...b,
+            processName: pidToInfo.get(b.pid)?.processName || 'Unknown',
+            commandLine: pidToInfo.get(b.pid)?.commandLine || ''
+          }));
+        }
+        return {
+          ...info,
+          processName: pidToInfo.get(info.pid)?.processName || 'Unknown',
+          commandLine: pidToInfo.get(info.pid)?.commandLine || ''
+        };
+      }));
+    });
+  });
+}
 
+/**
+ * Resolve PID -> { processName, commandLine } on Windows.
+ * Primary: PowerShell Get-CimInstance (works on modern Windows where `wmic` is
+ * deprecated/removed). Fallback: `wmic` for older systems without CIM/PowerShell.
+ * PIDs are pre-validated as integers by the caller, so WQL injection isn't possible.
+ */
+function queryWindowsProcessInfo(pids) {
+  return new Promise((resolve) => {
+    const filter = pids.map(p => `ProcessId=${p}`).join(' or ');
+    const psCmd =
+      `powershell -NoProfile -NonInteractive -Command ` +
+      `"Get-CimInstance Win32_Process -Filter '${filter}' | ` +
+      `Select-Object ProcessId,Name,CommandLine | ConvertTo-Json -Compress"`;
+
+    exec(psCmd, { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: 15000, windowsHide: true },
+      (error, stdout) => {
+        const map = new Map();
+        if (!error && stdout && stdout.trim()) {
+          try {
+            let data = JSON.parse(stdout);
+            if (!Array.isArray(data)) data = [data];
+            for (const proc of data) {
+              const pid = parseInt(proc.ProcessId, 10);
+              if (pid) {
+                map.set(pid, {
+                  processName: (proc.Name || 'Unknown').trim(),
+                  commandLine: (proc.CommandLine || '').trim()
+                });
+              }
+            }
+          } catch { /* malformed JSON -> fall through to wmic */ }
+        }
+
+        if (map.size > 0) {
+          resolve(map);
+        } else {
+          queryWindowsProcessInfoWmic(pids).then(resolve);
+        }
+      }
+    );
+  });
+}
+
+/** Legacy wmic fallback (CSV) for systems without PowerShell/CIM. */
+function queryWindowsProcessInfoWmic(pids) {
+  return new Promise((resolve) => {
+    exec(`wmic process where "ProcessId=${pids.join(' or ProcessId=')}" get ProcessId,Name,CommandLine /format:csv`,
+      { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 },
+      (error, stdout) => {
+        const map = new Map();
         if (!error && stdout) {
           const lines = stdout.trim().split('\n').slice(1);
           for (const line of lines) {
@@ -193,28 +258,11 @@ function getProcessNames(portInfos) {
               const cmdLine = parts.slice(1, -2).join(',').trim();
               const name = parts[parts.length - 2]?.trim();
               const pid = parseInt(parts[parts.length - 1]?.trim(), 10);
-              if (pid) {
-                pidToInfo.set(pid, { processName: name, commandLine: cmdLine });
-              }
+              if (pid) map.set(pid, { processName: name, commandLine: cmdLine });
             }
           }
         }
-
-        resolve(portInfos.map(info => {
-          // Enrich bindings with process info
-          if (info.bindings) {
-            info.bindings = info.bindings.map(b => ({
-              ...b,
-              processName: pidToInfo.get(b.pid)?.processName || 'Unknown',
-              commandLine: pidToInfo.get(b.pid)?.commandLine || ''
-            }));
-          }
-          return {
-            ...info,
-            processName: pidToInfo.get(info.pid)?.processName || 'Unknown',
-            commandLine: pidToInfo.get(info.pid)?.commandLine || ''
-          };
-        }));
+        resolve(map);
       }
     );
   });

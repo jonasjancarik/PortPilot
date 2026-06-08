@@ -28,6 +28,7 @@ function icon(name, size = 16) {
     kill: `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"/></svg>`,
     home: `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8l6-6 6 6M4 7v6h3v-3h2v3h3V7"/></svg>`,
     globe: `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c-2 2-2 4 0 6s2 4 0 6"/></svg>`,
+    logs: `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4h10M3 8h10M3 12h6"/></svg>`,
   };
   return icons[name] || '';
 }
@@ -111,6 +112,27 @@ function startPortReadinessCheck(appId, port, maxDelay) {
   };
 }
 
+// ============ Auto-Scan ============
+// Periodically refresh ports + running-app status so the list stays live while
+// juggling several localhost apps. Driven by the (previously inert) autoScan /
+// scanInterval settings. Skips work while the window is hidden (tray) to save CPU.
+let _autoScanTimer = null;
+function setupAutoScan() {
+  if (_autoScanTimer) {
+    clearInterval(_autoScanTimer);
+    _autoScanTimer = null;
+  }
+  if (state.settings.autoScan === false) return;
+
+  const seconds = Math.max(1, Math.round((state.settings.scanInterval || 5000) / 1000));
+  _autoScanTimer = setInterval(() => {
+    if (document.hidden) return;            // window minimised / in tray
+    if (state.settingsOpen) return;          // don't churn while editing settings
+    if (Object.keys(state.startingApps).length > 0) return; // a startup countdown owns refresh
+    loadApps();                              // silent refresh (no toast)
+  }, seconds * 1000);
+}
+
 async function checkDockerStatus() {
   try {
     const result = await window.portpilot.docker.status();
@@ -169,6 +191,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupIcons();
   loadTheme();
   await loadSettings();
+  initWebAgentUI();
   checkDockerStatus();
   await loadApps();
 
@@ -176,7 +199,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     await scanPorts();
   }
 
+  setupAutoScan();
+
   window.portpilot.on('trigger-scan', scanPorts);
+  window.portpilot.on('toast', (payload) => {
+    if (payload && payload.message) showToast(payload.message, payload.type || 'info');
+    loadApps();   // reflect tray-initiated changes (e.g. "Stop All Apps")
+  });
   window.portpilot.on('config-changed', async (data) => {
     console.log('[Renderer] Config changed externally, refreshing apps list...');
     await loadApps();
@@ -210,8 +239,85 @@ function setupIcons() {
   });
 }
 
+// ============ Event Delegation ============
+// All UI actions use data-act / data-change attributes routed through delegated
+// listeners (instead of inline on* handlers). This lets the CSP forbid inline
+// scripts (script-src 'self'), removing the main XSS->code-exec vector.
+function setupDelegation() {
+  const CLICK = {
+    copyCmdPath: el => copyCmdPath(el.dataset.cmd),
+    openPortInBrowser: el => openPortInBrowser(+el.dataset.port),
+    openProcessFolder: el => openProcessFolder(el.dataset.path),
+    copyPort: el => copyPort(+el.dataset.port),
+    killPort: el => killPort(+el.dataset.port),
+    toggleSection: el => toggleSection(el.dataset.section),
+    toggleGroup: el => toggleGroup(el.dataset.group),
+    openRenameGroupModal: el => openRenameGroupModal(el.dataset.group),
+    confirmDeleteGroup: el => confirmDeleteGroup(el.dataset.group),
+    startDocker: () => startDocker(),
+    killConflictingProcess: el => killConflictingProcess(el.dataset.id),
+    startApp: el => startApp(el.dataset.id),
+    openInBrowser: el => openInBrowser(el.dataset.id),
+    viewLogs: el => viewLogs(el.dataset.id),
+    stopApp: el => stopApp(el.dataset.id),
+    toggleFavorite: el => toggleFavorite(el.dataset.id),
+    openAppFolder: el => openAppFolder(el.dataset.id),
+    editApp: el => editApp(el.dataset.id),
+    deleteApp: el => deleteApp(el.dataset.id),
+    removeScanPath: el => removeScanPath(el.dataset.path),
+    addDiscoveredProject: el => addDiscoveredProject(+el.dataset.index),
+    selectGroupColor: el => selectGroupColor(el.dataset.color),
+    selectAllApps: () => selectAllApps(),
+    favoriteSelected: () => favoriteSelected(),
+    unfavoriteSelected: () => unfavoriteSelected(),
+    deleteSelected: () => deleteSelected(),
+    clearSelection: () => clearSelection(),
+    closeGroupModal: () => closeGroupModal(),
+    saveGroupModal: () => saveGroupModal()
+  };
+  const CHANGE = {
+    toggleAppSelection: el => toggleAppSelection(el.dataset.id),
+    toggleProjectSelection: el => toggleProjectSelection(+el.dataset.index),
+    moveSelectedToGroup: el => { moveSelectedToGroup(el.value); el.selectedIndex = 0; }
+  };
+
+  document.addEventListener('click', (e) => {
+    const actEl = e.target.closest('[data-act]');
+    if (actEl && CLICK[actEl.dataset.act]) {
+      CLICK[actEl.dataset.act](actEl, e);
+      return;
+    }
+    // Card expand: click anywhere on a card except an interactive control.
+    const card = e.target.closest('.app-card');
+    if (card && !e.target.closest('button, input, a, [data-act], .btn-star, .req-badge, .drag-handle')) {
+      toggleAppExpansion(card.dataset.id);
+    }
+  });
+
+  document.addEventListener('change', (e) => {
+    const el = e.target.closest('[data-change]');
+    if (el && CHANGE[el.dataset.change]) CHANGE[el.dataset.change](el, e);
+  });
+
+  // Keyboard activation for cards (separate from the global shortcut handler).
+  document.addEventListener('keydown', (e) => {
+    const card = e.target.closest('.app-card');
+    if (card && e.target === card) handleCardKeydown(e, card.dataset.id);
+  });
+
+  // Drag-and-drop reordering, delegated on the apps list.
+  const list = dom.appsList;
+  list.addEventListener('dragstart', handleDragStart);
+  list.addEventListener('dragover', handleDragOver);
+  list.addEventListener('dragenter', handleDragEnter);
+  list.addEventListener('dragleave', handleDragLeave);
+  list.addEventListener('drop', handleDrop);
+  list.addEventListener('dragend', handleDragEnd);
+}
+
 // ============ Event Listeners ============
 function setupEventListeners() {
+  setupDelegation();
   // Header
   document.getElementById('btn-scan').addEventListener('click', scanPorts);
   document.getElementById('btn-add-app').addEventListener('click', () => openAppModal());
@@ -268,6 +374,7 @@ function setupEventListeners() {
   document.getElementById('setting-devtools').addEventListener('change', saveSettings);
   document.getElementById('setting-close-to-tray').addEventListener('change', saveSettings);
   document.getElementById('setting-stop-apps-on-quit').addEventListener('change', saveSettings);
+  document.getElementById('setting-auto-resize').addEventListener('change', saveSettings);
   document.getElementById('btn-export').addEventListener('click', exportConfig);
   document.getElementById('btn-import').addEventListener('click', importConfig);
 
@@ -290,6 +397,26 @@ function setupEventListeners() {
   document.getElementById('btn-delete-confirm').addEventListener('click', confirmDeleteApp);
   document.getElementById('btn-delete-all-instead').addEventListener('click', deleteAllInstead);
 
+  // Web agent toggle (Option C) - only in the desktop build (preload exposes agent)
+  if (window.portpilot.agent) {
+    document.getElementById('setting-web-agent').addEventListener('change', toggleWebAgent);
+    document.getElementById('btn-open-web').addEventListener('click', () => window.portpilot.agent.open());
+    document.getElementById('btn-copy-web').addEventListener('click', () => {
+      const url = document.getElementById('web-agent-url').textContent;
+      if (url) { navigator.clipboard.writeText(url); showToast('URL copied', 'success'); }
+    });
+  } else {
+    document.getElementById('web-agent-section')?.classList.add('hidden');
+  }
+
+  // Logs modal
+  document.getElementById('logs-close').addEventListener('click', closeLogs);
+  document.getElementById('logs-refresh').addEventListener('click', refreshLogs);
+  document.getElementById('logs-copy').addEventListener('click', copyLogs);
+  document.getElementById('modal-logs').addEventListener('click', (e) => {
+    if (e.target.id === 'modal-logs') closeLogs();
+  });
+
   // Theme selector
   document.querySelectorAll('.theme-btn').forEach(btn => {
     btn.addEventListener('click', () => setTheme(btn.dataset.theme));
@@ -303,6 +430,7 @@ function setupEventListeners() {
         closeGroupModal();
         closeDeleteConfirm();
         closeSettings();
+        closeLogs();
         document.getElementById('modal-discoveries').classList.add('hidden');
       }
       if (e.key === 'Enter' && e.target.id === 'group-name-input') {
@@ -439,23 +567,23 @@ function renderPorts() {
         ` : ''}
         <span class="port-pid">${p.pid || ''}</span>
         ${cmdLine ? `
-        <span class="port-cmd-icon" onclick="event.stopPropagation()" title="Command path">
+        <span class="port-cmd-icon" title="Command path">
           CMD
           <div class="cmd-tooltip">
             <div class="cmd-tooltip-header">
               <span class="cmd-tooltip-title">Command</span>
-              <button class="cmd-copy-btn" onclick="copyCmdPath('${escapeHtml(cmdLine.replace(/\\/g, '\\\\').replace(/'/g, "\\'"))}')">
+              <button class="cmd-copy-btn" data-act="copyCmdPath" data-cmd="${escapeHtml(cmdLine)}">
                 ${icon('copy', 10)} Copy
               </button>
             </div>
             <div class="cmd-tooltip-path">${escapeHtml(cmdLine)}</div>
           </div>
         </span>` : ''}
-        <div class="port-actions" onclick="event.stopPropagation()">
-          <button class="btn btn-small btn-secondary" onclick="openPortInBrowser(${p.port})" title="Open in browser">${icon('browser', 12)}</button>
-          ${exePath ? `<button class="btn btn-small btn-secondary" onclick="openProcessFolder('${escapeHtml(exePath.replace(/\\/g, '\\\\'))}')" title="Open folder">${icon('folder', 12)}</button>` : ''}
-          <button class="btn btn-small btn-secondary" onclick="copyPort(${p.port})" title="Copy localhost:${p.port}">${icon('copy', 12)}</button>
-          <button class="btn btn-small btn-danger" onclick="killPort(${p.port})" title="Kill process">${icon('kill', 12)}</button>
+        <div class="port-actions">
+          <button class="btn btn-small btn-secondary" data-act="openPortInBrowser" data-port="${p.port}" title="Open in browser">${icon('browser', 12)}</button>
+          ${exePath ? `<button class="btn btn-small btn-secondary" data-act="openProcessFolder" data-path="${escapeHtml(exePath)}" title="Open folder">${icon('folder', 12)}</button>` : ''}
+          <button class="btn btn-small btn-secondary" data-act="copyPort" data-port="${p.port}" title="Copy localhost:${p.port}">${icon('copy', 12)}</button>
+          <button class="btn btn-small btn-danger" data-act="killPort" data-port="${p.port}" title="Kill process">${icon('kill', 12)}</button>
         </div>
       </div>
     </div>
@@ -594,10 +722,12 @@ async function loadApps() {
     renderPorts();
     updateAppsCount();
 
-    try {
-      await window.portpilot.window.autoResize(state.apps.length);
-    } catch (resizeError) {
-      console.log('Window auto-resize skipped:', resizeError.message);
+    if (state.settings.autoResizeWindow) {
+      try {
+        await window.portpilot.window.autoResize(state.apps.length);
+      } catch (resizeError) {
+        console.log('Window auto-resize skipped:', resizeError.message);
+      }
     }
   } catch (error) {
     showToast('Failed to load apps: ' + error.message, 'error');
@@ -697,7 +827,7 @@ function renderApps() {
   if (favorites.length > 0) {
     html += `
       <div class="app-section">
-        <div class="section-header" onclick="toggleSection('favorites')">
+        <div class="section-header" data-act="toggleSection" data-section="favorites">
           <span class="section-toggle">${state.favoritesExpanded ? icon('chevron', 10) : '<span style="display:inline-block;transform:rotate(-90deg)">' + icon('chevron', 10) + '</span>'}</span>
           <span class="section-title">${icon('star', 12)} Favorites</span>
           <span class="section-count">${favorites.length}</span>
@@ -717,13 +847,13 @@ function renderApps() {
     html += `
       <div class="app-section" data-group-id="${group.id}" style="border-left: 3px solid ${groupColor}">
         <div class="section-header group-header">
-          <span class="section-toggle" onclick="toggleGroup('${group.id}')">${isExpanded ? icon('chevron', 10) : '<span style="display:inline-block;transform:rotate(-90deg)">' + icon('chevron', 10) + '</span>'}</span>
+          <span class="section-toggle" data-act="toggleGroup" data-group="${group.id}">${isExpanded ? icon('chevron', 10) : '<span style="display:inline-block;transform:rotate(-90deg)">' + icon('chevron', 10) + '</span>'}</span>
           <span class="group-color-dot" style="background:${groupColor}"></span>
-          <span class="section-title" onclick="toggleGroup('${group.id}')">${escapeHtml(group.name)}</span>
+          <span class="section-title" data-act="toggleGroup" data-group="${group.id}">${escapeHtml(group.name)}</span>
           <span class="section-count">${apps.length}</span>
           <div class="section-actions">
-            <button class="btn-group-action" onclick="openRenameGroupModal('${group.id}')" title="Rename">${icon('edit', 12)}</button>
-            <button class="btn-group-action btn-group-delete" onclick="confirmDeleteGroup('${group.id}')" title="Delete">${icon('kill', 12)}</button>
+            <button class="btn-group-action" data-act="openRenameGroupModal" data-group="${group.id}" title="Rename">${icon('edit', 12)}</button>
+            <button class="btn-group-action btn-group-delete" data-act="confirmDeleteGroup" data-group="${group.id}" title="Delete">${icon('kill', 12)}</button>
           </div>
         </div>
         <div class="section-apps ${isExpanded ? '' : 'collapsed'}">
@@ -739,7 +869,7 @@ function renderApps() {
   if (ungroupedApps.length > 0 || state.groups.length === 0) {
     html += `
       <div class="app-section">
-        <div class="section-header" onclick="toggleSection('others')">
+        <div class="section-header" data-act="toggleSection" data-section="others">
           <span class="section-toggle">${state.otherProjectsExpanded ? icon('chevron', 10) : '<span style="display:inline-block;transform:rotate(-90deg)">' + icon('chevron', 10) + '</span>'}</span>
           <span class="section-title">${icon('folder', 12)} Other Projects</span>
           <span class="section-count">${ungroupedApps.length}</span>
@@ -807,7 +937,7 @@ function renderAppCard(app) {
   const badges = [];
   if (reqs.docker) {
     const dockerReady = state.dockerRunning;
-    badges.push(`<span class="req-badge ${dockerReady ? '' : 'badge-warning'}" title="${dockerReady ? 'Docker running' : 'Click to start Docker'}" ${dockerReady ? '' : 'onclick="startDocker()"'}>${icon('docker', 12)}</span>`);
+    badges.push(`<span class="req-badge ${dockerReady ? '' : 'badge-warning'}" title="${dockerReady ? 'Docker running' : 'Click to start Docker'}" ${dockerReady ? '' : 'data-act="startDocker"'}>${icon('docker', 12)}</span>`);
   }
   if (reqs.node) badges.push(`<span class="req-badge" title="Node.js">N</span>`);
   if (reqs.python) badges.push(`<span class="req-badge" title="Python">Py</span>`);
@@ -822,37 +952,38 @@ function renderAppCard(app) {
   let actionsHtml = '';
   if (conflict) {
     actionsHtml = `
-      <button class="btn btn-small btn-secondary" onclick="event.stopPropagation(); openPortInBrowser(${conflict.port})" title="Open port">${icon('browser', 12)}</button>
-      <button class="btn btn-small btn-warning" onclick="event.stopPropagation(); killConflictingProcess('${app.id}')" title="Kill blocker">${icon('kill', 12)}</button>
-      <button class="btn btn-small btn-success" onclick="event.stopPropagation(); startApp('${app.id}')" title="Start">${icon('play', 12)}</button>`;
+      <button class="btn btn-small btn-secondary" data-act="openPortInBrowser" data-port="${conflict.port}" title="Open port">${icon('browser', 12)}</button>
+      <button class="btn btn-small btn-warning" data-act="killConflictingProcess" data-id="${app.id}" title="Kill blocker">${icon('kill', 12)}</button>
+      <button class="btn btn-small btn-success" data-act="startApp" data-id="${app.id}" title="Start">${icon('play', 12)}</button>`;
   } else if (isRunning || starting) {
     actionsHtml = `
-      <button class="btn btn-small btn-secondary" onclick="event.stopPropagation(); openInBrowser('${app.id}')" title="Open" ${starting ? 'disabled' : ''}>${icon('browser', 12)}</button>
-      <button class="btn btn-small btn-danger" onclick="event.stopPropagation(); stopApp('${app.id}')" title="Stop" ${starting ? 'disabled' : ''}>${icon('stop', 12)}</button>`;
+      <button class="btn btn-small btn-secondary" data-act="openInBrowser" data-id="${app.id}" title="Open" ${starting ? 'disabled' : ''}>${icon('browser', 12)}</button>
+      ${managedRunning ? `<button class="btn btn-small btn-secondary" data-act="viewLogs" data-id="${app.id}" title="View logs">${icon('logs', 12)}</button>` : ''}
+      <button class="btn btn-small btn-danger" data-act="stopApp" data-id="${app.id}" title="Stop" ${starting ? 'disabled' : ''}>${icon('stop', 12)}</button>`;
   } else {
-    actionsHtml = `<button class="btn btn-small btn-success" onclick="event.stopPropagation(); startApp('${app.id}')" title="Start">${icon('play', 12)}</button>`;
+    actionsHtml = `<button class="btn btn-small btn-success" data-act="startApp" data-id="${app.id}" title="Start">${icon('play', 12)}</button>`;
   }
 
   return `
     <div class="app-card ${isSelected ? 'selected' : ''} ${isExpanded ? 'expanded' : ''}"
          data-id="${app.id}"
          draggable="true"
-         ondragstart="handleDragStart(event, '${app.id}')"
-         ondragover="handleDragOver(event)"
-         ondragenter="handleDragEnter(event)"
-         ondragleave="handleDragLeave(event)"
-         ondrop="handleDrop(event, '${app.id}')"
-         ondragend="handleDragEnd(event)"
-         onclick="if (event.target.closest('.app-checkbox, .btn-star, .app-actions, .app-actions-visible, .drag-handle, button, .req-badge')) return; toggleAppExpansion('${app.id}')">
-      <span class="drag-handle" title="Drag to reorder">${icon('grip', 14)}</span>
+         tabindex="0"
+         role="button"
+         aria-expanded="${isExpanded}"
+         aria-label="${escapeHtml(app.name)} — press Enter to ${isExpanded ? 'collapse' : 'expand'} details"
+         >
+      <span class="drag-handle" title="Drag to reorder" aria-hidden="true">${icon('grip', 14)}</span>
       <input type="checkbox" class="app-checkbox"
              ${isSelected ? 'checked' : ''}
-             onchange="event.stopPropagation(); toggleAppSelection('${app.id}')"
+             data-change="toggleAppSelection"
+             data-id="${app.id}"
+             aria-label="Select ${escapeHtml(app.name)}"
              title="Select">
       <span class="status-dot ${statusClass}"></span>
       <div class="app-name-area">
         <button class="btn-star ${app.isFavorite ? 'starred' : ''}"
-                onclick="event.stopPropagation(); toggleFavorite('${app.id}')"
+                data-act="toggleFavorite" data-id="${app.id}"
                 title="${app.isFavorite ? 'Unfavorite' : 'Favorite'}">
           ${app.isFavorite ? icon('star', 14) : icon('star-outline', 14)}
         </button>
@@ -867,9 +998,9 @@ function renderAppCard(app) {
         ${actionsHtml}
       </div>
       <div class="app-actions">
-        <button class="btn btn-small btn-secondary" onclick="event.stopPropagation(); openAppFolder('${app.id}')" title="Open folder">${icon('folder', 12)}</button>
-        <button class="btn btn-small btn-secondary" onclick="event.stopPropagation(); editApp('${app.id}')" title="Edit">${icon('edit', 12)}</button>
-        <button class="btn btn-small btn-secondary" onclick="event.stopPropagation(); deleteApp('${app.id}')" title="Delete">${icon('trash', 12)}</button>
+        <button class="btn btn-small btn-secondary" data-act="openAppFolder" data-id="${app.id}" title="Open folder">${icon('folder', 12)}</button>
+        <button class="btn btn-small btn-secondary" data-act="editApp" data-id="${app.id}" title="Edit">${icon('edit', 12)}</button>
+        <button class="btn btn-small btn-secondary" data-act="deleteApp" data-id="${app.id}" title="Delete">${icon('trash', 12)}</button>
       </div>
       <div class="app-expanded-details">
         <div class="app-detail-row"><span class="app-detail-label">CMD</span><span class="app-detail-value">${escapeHtml(app.command)}</span></div>
@@ -1164,6 +1295,16 @@ function toggleAppExpansion(appId) {
   renderApps();
 }
 
+// Keyboard activation for app cards (Enter/Space toggles details), but only when
+// the card itself is focused - never when focus is on a child control.
+function handleCardKeydown(event, appId) {
+  if (event.target !== event.currentTarget) return;
+  if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
+    event.preventDefault();
+    toggleAppExpansion(appId);
+  }
+}
+
 function expandAllApps() {
   state.apps.forEach(app => state.expandedApps.add(app.id));
   renderApps();
@@ -1177,31 +1318,39 @@ function collapseAllApps() {
 // ============ Drag and Drop ============
 let draggedAppId = null;
 
-function handleDragStart(event, appId) {
-  draggedAppId = appId;
-  event.currentTarget.classList.add('dragging');
+function handleDragStart(event) {
+  const card = event.target.closest('.app-card');
+  if (!card) return;
+  draggedAppId = card.dataset.id;
+  card.classList.add('dragging');
   event.dataTransfer.effectAllowed = 'move';
-  event.dataTransfer.setData('text/html', event.currentTarget.innerHTML);
+  event.dataTransfer.setData('text/plain', draggedAppId);
 }
 
 function handleDragOver(event) {
+  if (!event.target.closest('.app-card')) return;
   event.preventDefault();
   event.dataTransfer.dropEffect = 'move';
   return false;
 }
 
 function handleDragEnter(event) {
-  event.currentTarget.classList.add('drag-over');
+  const card = event.target.closest('.app-card');
+  if (card) card.classList.add('drag-over');
 }
 
 function handleDragLeave(event) {
-  event.currentTarget.classList.remove('drag-over');
+  const card = event.target.closest('.app-card');
+  if (card && !card.contains(event.relatedTarget)) card.classList.remove('drag-over');
 }
 
-async function handleDrop(event, targetAppId) {
+async function handleDrop(event) {
+  const card = event.target.closest('.app-card');
+  if (!card) return;
+  const targetAppId = card.dataset.id;
   event.stopPropagation();
   event.preventDefault();
-  event.currentTarget.classList.remove('drag-over');
+  card.classList.remove('drag-over');
 
   if (draggedAppId === targetAppId) return;
 
@@ -1232,9 +1381,11 @@ async function handleDrop(event, targetAppId) {
   }
 }
 
-function handleDragEnd(event) {
-  event.currentTarget.classList.remove('dragging');
-  document.querySelectorAll('.app-card').forEach(card => card.classList.remove('drag-over'));
+function handleDragEnd() {
+  document.querySelectorAll('.app-card').forEach(card => {
+    card.classList.remove('drag-over');
+    card.classList.remove('dragging');
+  });
   draggedAppId = null;
 }
 
@@ -1350,7 +1501,7 @@ function renderScanPaths(scanPaths) {
   container.innerHTML = scanPaths.map(path => `
     <div class="scan-path-item">
       <span class="path-text">${escapeHtml(path)}</span>
-      <button class="btn btn-small btn-danger" onclick="removeScanPath('${escapeHtml(path).replace(/'/g, "\\'")}')">Remove</button>
+      <button class="btn btn-small btn-danger" data-act="removeScanPath" data-path="${escapeHtml(path)}">Remove</button>
     </div>
   `).join('');
 }
@@ -1401,7 +1552,7 @@ function showDiscoveriesModal(projects) {
     return `
       <div class="discovery-item" data-index="${index}">
         <input type="checkbox" class="discovery-checkbox"
-               onchange="toggleProjectSelection(${index})"
+               data-change="toggleProjectSelection" data-index="${index}"
                title="Select">
         <div class="discovery-content">
           <div class="discovery-header">
@@ -1416,7 +1567,7 @@ function showDiscoveriesModal(projects) {
             <div class="detail-row"><span class="label">Port:</span><code>${proj.port || 'Auto'}</code></div>
             <div class="detail-row"><span class="label">Path:</span><code class="path-text">${escapeHtml(proj.path)}</code></div>
           </div>
-          <button class="btn btn-small btn-primary btn-add-discovery" onclick="addDiscoveredProject(${index})">Add</button>
+          <button class="btn btn-small btn-primary btn-add-discovery" data-act="addDiscoveredProject" data-index="${index}">Add</button>
         </div>
       </div>
     `;
@@ -1561,7 +1712,7 @@ function renderGroupColorSwatches(selected) {
     <button type="button"
             class="color-swatch ${c === current ? 'selected' : ''}"
             style="background:${c}"
-            onclick="selectGroupColor('${c}')"
+            data-act="selectGroupColor" data-color="${c}"
             title="${c}"></button>
   `).join('');
   document.getElementById('group-color-input').value = current;
@@ -1720,6 +1871,7 @@ async function loadSettings() {
     document.getElementById('setting-devtools').checked = state.settings.openDevTools === true;
     document.getElementById('setting-close-to-tray').checked = state.settings.closeToTray !== false;
     document.getElementById('setting-stop-apps-on-quit').checked = state.settings.stopAppsOnQuit !== false;
+    document.getElementById('setting-auto-resize').checked = state.settings.autoResizeWindow === true;
     state.favoritesExpanded = result.settings.favoritesExpanded !== false;
     state.otherProjectsExpanded = result.settings.otherProjectsExpanded !== false;
   }
@@ -1732,10 +1884,12 @@ async function saveSettings() {
     scanInterval: parseInt(document.getElementById('setting-interval').value) * 1000,
     openDevTools: document.getElementById('setting-devtools').checked,
     closeToTray: document.getElementById('setting-close-to-tray').checked,
-    stopAppsOnQuit: document.getElementById('setting-stop-apps-on-quit').checked
+    stopAppsOnQuit: document.getElementById('setting-stop-apps-on-quit').checked,
+    autoResizeWindow: document.getElementById('setting-auto-resize').checked
   };
   await window.portpilot.config.updateSettings(settings);
   state.settings = settings;
+  setupAutoScan();   // apply new autoScan / scanInterval immediately
   showToast('Settings saved', 'success');
 }
 
@@ -1798,6 +1952,99 @@ function setTheme(themeName, showNotification = true) {
     };
     showToast(`Theme: ${themeLabels[themeName] || themeName}`, 'success');
   }
+}
+
+// ============ Web Agent (Option C) ============
+async function initWebAgentUI() {
+  if (!window.portpilot.agent) {
+    document.getElementById('web-agent-section')?.classList.add('hidden');
+    return;
+  }
+  try {
+    const status = await window.portpilot.agent.status();
+    document.getElementById('setting-web-agent').checked = !!status.running;
+    updateWebAgentUI(status.running ? status : null);
+  } catch { /* leave default */ }
+}
+
+function updateWebAgentUI(info) {
+  const box = document.getElementById('web-agent-info');
+  if (info && info.url) {
+    document.getElementById('web-agent-url').textContent = info.url;
+    box.classList.remove('hidden');
+  } else {
+    box.classList.add('hidden');
+  }
+}
+
+async function toggleWebAgent(e) {
+  if (e.target.checked) {
+    const result = await window.portpilot.agent.start();
+    if (result.success) {
+      updateWebAgentUI(result);
+      showToast(`Web access on: ${result.url}`, 'success');
+    } else {
+      e.target.checked = false;
+      showToast('Failed to enable web access: ' + result.error, 'error');
+    }
+  } else {
+    await window.portpilot.agent.stop();
+    updateWebAgentUI(null);
+    showToast('Web access disabled', 'info');
+  }
+}
+
+// ============ Logs Viewer ============
+let _logsAppId = null;
+let _logsTimer = null;
+
+async function viewLogs(appId) {
+  _logsAppId = appId;
+  const app = state.apps.find(a => a.id === appId);
+  document.getElementById('logs-app-name').textContent = app ? app.name : 'App';
+  document.getElementById('modal-logs').classList.remove('hidden');
+  await refreshLogs();
+  if (_logsTimer) clearInterval(_logsTimer);
+  _logsTimer = setInterval(refreshLogs, 2000);   // stream while running
+}
+
+async function refreshLogs() {
+  if (!_logsAppId) return;
+  const out = document.getElementById('logs-stdout');
+  const err = document.getElementById('logs-stderr');
+  const errSection = document.getElementById('logs-stderr-section');
+  try {
+    const result = await window.portpilot.process.logs(_logsAppId);
+    if (result.success) {
+      const autoscroll = document.getElementById('logs-autoscroll')?.checked !== false;
+      out.textContent = result.stdout && result.stdout.trim() ? result.stdout : '(no stdout yet)';
+      err.textContent = result.stderr || '';
+      errSection.style.display = (result.stderr && result.stderr.trim()) ? '' : 'none';
+      if (autoscroll) {
+        out.scrollTop = out.scrollHeight;
+        err.scrollTop = err.scrollHeight;
+      }
+    } else {
+      out.textContent = 'No logs available - this app was not started by PortPilot, or it has exited.';
+      errSection.style.display = 'none';
+    }
+  } catch (e) {
+    out.textContent = 'Failed to read logs: ' + e.message;
+  }
+}
+
+function closeLogs() {
+  document.getElementById('modal-logs').classList.add('hidden');
+  if (_logsTimer) { clearInterval(_logsTimer); _logsTimer = null; }
+  _logsAppId = null;
+}
+
+function copyLogs() {
+  const out = document.getElementById('logs-stdout').textContent;
+  const err = document.getElementById('logs-stderr').textContent;
+  const text = [out, (err && err.trim()) ? '\n--- stderr ---\n' + err : ''].join('');
+  navigator.clipboard.writeText(text);
+  showToast('Logs copied', 'success');
 }
 
 // ============ Utilities ============
@@ -1864,6 +2111,7 @@ window.moveSelectedToGroup = moveSelectedToGroup;
 window.expandAllApps = expandAllApps;
 window.collapseAllApps = collapseAllApps;
 window.toggleAppExpansion = toggleAppExpansion;
+window.handleCardKeydown = handleCardKeydown;
 window.toggleGroup = toggleGroup;
 window.handleDragStart = handleDragStart;
 window.handleDragOver = handleDragOver;
@@ -1872,3 +2120,7 @@ window.handleDragLeave = handleDragLeave;
 window.handleDrop = handleDrop;
 window.handleDragEnd = handleDragEnd;
 window.openProcessFolder = openProcessFolder;
+window.viewLogs = viewLogs;
+window.closeLogs = closeLogs;
+window.copyLogs = copyLogs;
+window.refreshLogs = refreshLogs;

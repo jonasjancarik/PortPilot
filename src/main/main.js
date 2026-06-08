@@ -5,6 +5,7 @@ const { ConfigStore } = require('./configStore');
 
 let mainWindow = null;
 let tray = null;
+let webAgent = null;  // opt-in loopback web agent (Option C), shares this process's configStore
 
 /** Create the main application window */
 function createWindow(configStore) {
@@ -167,6 +168,46 @@ if (!gotTheLock) {
       }
     });
 
+    // ============ Web Agent (Option C: opt-in browser access) ============
+    // Runs the loopback web agent IN-PROCESS, sharing this configStore and
+    // process table, so apps started from the browser and the desktop are the
+    // same. Off until the user enables it in Settings.
+    ipcMain.handle('agent:status', () => (webAgent ? { running: true, ...webAgent.getInfo() } : { running: false }));
+
+    ipcMain.handle('agent:start', async () => {
+      try {
+        if (webAgent) return { success: true, ...webAgent.getInfo() };
+        const { createAgent, DEFAULT_PORT } = require('../agent/server');
+        const { findAvailablePort } = require('./portScanner');
+        // Auto-pick a free port from the default up, so a busy 7317 (e.g. a
+        // standalone agent) doesn't dead-end the toggle. The returned info
+        // carries the real URL, which the renderer shows.
+        const port = (await findAvailablePort(DEFAULT_PORT)) || DEFAULT_PORT;
+        webAgent = createAgent({ configStore, port });
+        const info = await webAgent.start();
+        return { success: true, ...info };
+      } catch (err) {
+        webAgent = null;
+        return { success: false, error: err.code === 'EADDRINUSE' ? 'Port in use - set PORTPILOT_AGENT_PORT' : err.message };
+      }
+    });
+
+    ipcMain.handle('agent:stop', async () => {
+      try {
+        if (webAgent) { await webAgent.stop(); webAgent = null; }
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: err.message };
+      }
+    });
+
+    ipcMain.handle('agent:open', async () => {
+      if (!webAgent) return { success: false, error: 'Agent not running' };
+      const { shell } = require('electron');
+      await shell.openExternal(webAgent.getInfo().url);
+      return { success: true };
+    });
+
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         const window = createWindow(null);
@@ -184,6 +225,12 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', async (event) => {
   app.isQuitting = true;
+
+  // Stop the web agent if it was enabled
+  if (webAgent) {
+    try { await webAgent.stop(); } catch (err) { console.error('Error stopping web agent:', err); }
+    webAgent = null;
+  }
 
   // Clean up child processes if enabled in settings
   if (configStore) {

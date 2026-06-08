@@ -6,8 +6,8 @@
 
 **[MCP Integration Setup](mcp-server/README.md)**
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/m4cd4r4/PortPilot/releases/tag/v2.0.0)
-[![Tests](https://img.shields.io/badge/tests-36%2F36%20passing-brightgreen.svg)](TESTING_SUMMARY.md)
+[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](https://github.com/m4cd4r4/PortPilot/releases/tag/v3.0.0)
+[![Tests](https://img.shields.io/badge/tests-Playwright%20E2E-blue.svg)](tests/)
 [![Licence](https://img.shields.io/badge/licence-MIT-green.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-enabled-purple.svg)](mcp-server/README.md)
 
@@ -18,6 +18,7 @@
 ## 📑 Table of Contents
 
 - [✨ AI Agent Integration](#-ai-agent-integration)
+- [What's New in v3.0.0](#whats-new-in-v300)
 - [What's New in v2.0.0](#whats-new-in-v200)
 - [What's New in v1.7.0](#whats-new-in-v170)
 - [Features](#features)
@@ -48,6 +49,22 @@ Control PortPilot with natural language! Works with Claude Code, Cursor, Windsur
 
 **[→ Setup MCP Integration](mcp-server/README.md)**
 
+## What's New in v3.0.0
+
+### Web Agent - PortPilot in your browser
+
+- Run the full UI in a browser with no Electron, via `npm run agent` or the opt-in **Web Access** toggle in Settings
+- Embedded in the desktop app it runs in-process, sharing the same config and process table, so apps started in the browser and on the desktop are the same
+- Live updates over SSE - external MCP edits push to the browser instantly
+- Hardened loopback security: `127.0.0.1`-only, per-session token, Host/Origin allowlists, locked CORS, strict CSP. Full threat model in [SECURITY.md](SECURITY.md)
+- Auto-picks a free port if 7317 is taken
+
+### All clients aligned
+
+- The desktop app, MCP server, VS Code extension, and web agent now share one config path and the same **two-phase running detection**, so apps on a dynamic or non-preferred port are detected instead of reading "stopped"
+- Dropped the deprecated `wmic` for PowerShell/CIM plus a batched `tasklist` lookup
+- Fixed config data loss when editing MCP-added apps, and made `killPort` locale-independent across clients
+
 ## What's New in v2.0.0
 
 ### Full UI Redesign
@@ -57,7 +74,7 @@ Control PortPilot with natural language! Works with Claude Code, Cursor, Windsur
 - **Knowledge tab removed** - documentation moved to the GitHub wiki
 - **All emoji replaced** with crisp SVG icons (21 inline SVGs)
 - **Glassmorphism card design** with backdrop-filter blur
-- **New "Glass" theme added** (7 themes total)
+- **New "Glass" theme added** (6 themes total)
 - **Global search bar** filters both apps and ports simultaneously
 - **App cards show running status inline** (memory, uptime, PID)
 
@@ -114,7 +131,7 @@ Control PortPilot with natural language! Works with Claude Code, Cursor, Windsur
 - **IPv4/IPv6 Awareness** - Shows which protocol your app is bound to
 - **System Tray** - Minimize to tray, "Stop All Apps" menu option, configurable window behaviour
 - **Single-Instance Lock** - Only one PortPilot runs at a time, focuses existing window
-- **Multi-Theme Support** - 7 themes including TokyoNight, Brutalist, Nord, Dracula, Glass
+- **Multi-Theme Support** - 6 themes including TokyoNight, Brutalist Dark, Nord, Dracula, Glass
 - **VS Code Extension** - Status bar counter, collapsible groups, full CRUD from the sidebar
 - **MCP v2.0 with 18 tools** - Manage your entire dev environment via any MCP-compatible AI assistant
 
@@ -315,15 +332,15 @@ Explore all PortPilot features including app management, the Active Ports scanne
 
 ### Download (Recommended)
 
-**Latest Release: v2.0.0**
+**Latest Release: v3.0.0**
 
 **Windows:**
-- [PortPilot-2.0.0-x64.exe](https://github.com/m4cd4r4/PortPilot/releases/download/v2.0.0/PortPilot-2.0.0-x64.exe) - NSIS Installer (~72 MB)
-- [PortPilot-2.0.0-portable.exe](https://github.com/m4cd4r4/PortPilot/releases/download/v2.0.0/PortPilot-2.0.0-portable.exe) - Portable (~72 MB)
+- [PortPilot-3.0.0-x64.exe](https://github.com/m4cd4r4/PortPilot/releases/download/v3.0.0/PortPilot-3.0.0-x64.exe) - NSIS Installer (~72 MB)
+- [PortPilot-3.0.0-portable.exe](https://github.com/m4cd4r4/PortPilot/releases/download/v3.0.0/PortPilot-3.0.0-portable.exe) - Portable (~72 MB)
 
 **Linux:**
-- [PortPilot-2.0.0-x86_64.AppImage](https://github.com/m4cd4r4/PortPilot/releases/download/v2.0.0/PortPilot-2.0.0-x86_64.AppImage) - Universal Linux (~98 MB)
-- [PortPilot-2.0.0-amd64.deb](https://github.com/m4cd4r4/PortPilot/releases/download/v2.0.0/PortPilot-2.0.0-amd64.deb) - Debian/Ubuntu (~69 MB)
+- [PortPilot-3.0.0-x86_64.AppImage](https://github.com/m4cd4r4/PortPilot/releases/download/v3.0.0/PortPilot-3.0.0-x86_64.AppImage) - AppImage (~98 MB)
+- [PortPilot-3.0.0-amd64.deb](https://github.com/m4cd4r4/PortPilot/releases/download/v3.0.0/PortPilot-3.0.0-amd64.deb) - Debian/Ubuntu (~69 MB)
 
 **macOS:**
 - Build from source (see below) - macOS is supported but not officially tested
@@ -425,7 +442,6 @@ This ensures the browser button opens the correct URL.
 |-------|-------------|
 | **TokyoNight** | Dark blue with cyan/magenta accents (default) |
 | **Brutalist Dark** | Pure black, yellow/cyan, monospace |
-| **Brutalist Light** | White with black borders, yellow highlights |
 | **Nord** | Cool arctic blues |
 | **Dracula** | Purple/pink dark theme |
 | **Solarized Light** | Warm, easy on the eyes |
@@ -496,39 +512,25 @@ npm run build:all
 
 ## Testing
 
-PortPilot includes a comprehensive Playwright E2E test suite with **100% test coverage**.
+PortPilot uses a Playwright end-to-end smoke suite that drives the real Electron app.
 
 ```bash
-# Run all tests (36 tests)
-npm run test:all
-
-# Run core functionality tests (11 tests)
+# Run the E2E smoke suite (launches Electron + test servers on 3000/3001/8080)
 npm test
 
-# Run groups tests (8 tests)
-npm run test:groups
-
-# Run v1.7.0 feature tests (17 tests)
-npm run test:v1.7
+# On headless Linux, run under a virtual display
+xvfb-run -a npm test
 
 # Generate UI screenshots
 npm run screenshots
 ```
 
-**Test Coverage:**
-- ✅ UI rendering and navigation (100%)
-- ✅ Port scanning functionality (100%)
-- ✅ Port filtering (100%)
-- ✅ Port killing (100%)
-- ✅ Process cleanup (100%)
-- ✅ Settings persistence (100%)
-- ✅ App search, sort, and filter (100%)
-- ✅ Group colours and management (100%)
-- ✅ Quick Add wizard (100%)
-- ✅ Keyboard shortcuts (100%)
-- ✅ Header running summary (100%)
+**Covered:** window launch, port scanning, test-server detection, port-card rendering,
+global search filtering, copy/kill controls, the Settings panel, and the Add App modal.
 
-**Total: 36/36 tests passing** - See [TESTING_SUMMARY.md](TESTING_SUMMARY.md) for details.
+> The older `v1.3`/`v1.7`/`groups` feature specs targeted the pre-v2.0 tab UI and are
+> kept for reference only; they need rewriting against the single-pane layout before
+> being re-enabled in `test:all`.
 
 ## ✨ AI Agent Integration (MCP)
 
@@ -599,6 +601,30 @@ Just ask in natural language:
 
 See [mcp-server/README.md](mcp-server/README.md) for full documentation.
 
+## Web Agent (v3 preview)
+
+PortPilot can also run as a **local web app** — the same UI in your browser,
+backed by a hardened loopback agent. This is an experimental preview.
+
+```bash
+npm run agent
+# →  http://127.0.0.1:7317/
+```
+
+The agent runs the same backend as the desktop app and reuses the same UI, so
+you get PortPilot in a browser tab without Electron. Because the backend can
+start/kill processes, it is locked down with several independent controls:
+
+- Binds to **`127.0.0.1` only** (never reachable off your machine)
+- A **per-session token** is required on every API call
+- **Host-header** validation (defeats DNS-rebinding) and **Origin/CORS** lockdown
+- A custom header forces a **CORS preflight**, blocking cross-site requests
+- Strict **CSP**; token file written `chmod 600`
+
+See **[SECURITY.md](SECURITY.md)** for the full threat model and verified
+behaviour. Run **either** the desktop app or the agent at a time (they track
+started processes separately).
+
 ## Tech Stack
 
 - **Electron 27** - Cross-platform desktop framework
@@ -610,13 +636,21 @@ See [mcp-server/README.md](mcp-server/README.md) for full documentation.
 
 ## Version History
 
-### v2.0.0 (2026-04-14) - Current Release
+### v3.0.0 (2026-06-08) - Current Release
+- Web Agent - run PortPilot in the browser (`npm run agent` or the in-app Web Access toggle), shared in-process with the desktop app
+- SSE live updates, auto-port-fallback, and a hardened loopback security model (token, Host/Origin allowlists, locked CORS, strict CSP) - see SECURITY.md
+- All clients aligned on one config path and the same two-phase running detection (apps on dynamic ports now detected)
+- Dropped deprecated wmic for PowerShell/CIM + tasklist; locale-independent killPort across clients
+- Fixed config data loss on MCP-added apps; VS Code extension now matches the desktop app's running detection
+- App log viewer (desktop), opt-in window auto-resize, app-card accessibility
+
+### v2.0.0 (2026-04-14)
 - Full UI redesign - single-pane layout replaces 4-tab system
 - Settings moved to slide-out panel with backdrop blur
 - Knowledge tab removed (docs moved to GitHub wiki)
 - 21 inline SVG icons replace all emoji
 - Glassmorphism card design with backdrop-filter blur
-- New Glass theme (7 themes total)
+- New Glass theme (6 themes total)
 - Global search bar filters apps and ports simultaneously
 - MCP Server v2.0 - rewritten with McpServer API and Zod schemas on SDK 1.29.0
 - 6 new MCP tools (18 total): get_status, check_port, bulk_start, bulk_stop, list_groups, move_to_group

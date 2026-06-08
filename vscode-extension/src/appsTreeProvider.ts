@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { readConfig, PortPilotApp, PortPilotGroup } from './config';
-import { scanPorts, ActivePort } from './portScanner';
+import { scanPorts, computeRunning, ActivePort } from './portScanner';
 
 export class GroupTreeItem extends vscode.TreeItem {
   constructor(
@@ -56,16 +56,21 @@ export class AppsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   private _onDidChangeTreeData = new vscode.EventEmitter<TreeNode | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
-  private activePorts: ActivePort[] = [];
+  private runningByAppId: Map<string, ActivePort> = new Map();
 
-  refresh(): void {
-    this.activePorts = scanPorts();
+  async refresh(): Promise<void> {
+    const activePorts = await scanPorts();
+    this.runningByAppId = await computeRunning(readConfig().apps, activePorts);
     this._onDidChangeTreeData.fire(undefined);
   }
 
-  setActivePorts(ports: ActivePort[]): void {
-    this.activePorts = ports;
+  async setActivePorts(ports: ActivePort[]): Promise<void> {
+    this.runningByAppId = await computeRunning(readConfig().apps, ports);
     this._onDidChangeTreeData.fire(undefined);
+  }
+
+  getRunningByAppId(): Map<string, ActivePort> {
+    return this.runningByAppId;
   }
 
   getTreeItem(element: TreeNode): vscode.TreeItem {
@@ -87,7 +92,7 @@ export class AppsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     });
 
     const makeAppItem = (app: PortPilotApp) => {
-      const matched = this.activePorts.find(p => p.port === app.preferredPort);
+      const matched = this.runningByAppId.get(app.id);
       return new AppTreeItem(app, matched);
     };
 

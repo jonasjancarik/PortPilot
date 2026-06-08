@@ -1,16 +1,15 @@
 const fs = require('fs');
 const path = require('path');
-const { app } = require('electron');
+const { getConfigPath } = require('../core/configPath');
 
 /**
  * ConfigStore - Manages persistent app configurations
  */
 class ConfigStore {
-  constructor(mainWindow = null) {
-    this.configPath = path.join(
-      app?.getPath('userData') || path.join(process.cwd(), 'data'),
-      'portpilot-config.json'
-    );
+  constructor(mainWindow = null, configPathOverride = null) {
+    // Resolve via the shared helper so the desktop app, MCP server and web agent
+    // all land on the same file (works with or without Electron).
+    this.configPath = configPathOverride || getConfigPath();
     this.config = this.load();
     this.mainWindow = mainWindow;
     this.watchConfigFile();
@@ -39,11 +38,15 @@ class ConfigStore {
             const newConfig = JSON.stringify(this.config);
 
             // Only notify if config actually changed
-            if (oldConfig !== newConfig && this.mainWindow && !this.mainWindow.isDestroyed()) {
-              this.mainWindow.webContents.send('config-changed', {
-                apps: this.config.apps,
-                settings: this.config.settings
-              });
+            if (oldConfig !== newConfig) {
+              const payload = { apps: this.config.apps, settings: this.config.settings };
+              if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+                this.mainWindow.webContents.send('config-changed', payload);
+              }
+              // Optional transport-agnostic listener (e.g. the web agent's SSE broadcast)
+              if (typeof this.onConfigChange === 'function') {
+                try { this.onConfigChange(payload); } catch (e) { console.error('onConfigChange failed:', e.message); }
+              }
             }
           }, 100); // 100ms debounce
         }
@@ -78,6 +81,7 @@ class ConfigStore {
         // Window behavior
         closeToTray: true,  // Close button minimizes to tray (true) or exits (false)
         stopAppsOnQuit: true,  // Stop PortPilot-managed apps when quitting
+        autoResizeWindow: false,  // Auto-grow/shrink window height to app count (off by default - it fights manual resizing)
 
         // Favorites system
         favoritesExpanded: true,
@@ -136,20 +140,29 @@ class ConfigStore {
     }
 
     const existingIndex = this.config.apps.findIndex(a => a.id === appConfig.id);
-    
+    const existing = existingIndex >= 0 ? this.config.apps[existingIndex] : {};
+
+    // Merge onto the existing record so fields the caller didn't supply
+    // (e.g. `description` from an MCP-added app, `startupDelay`) are preserved.
+    // Previously this rebuilt a fixed-shape object, silently dropping any field
+    // not in the list - so starring or editing an app destroyed its description.
+    const has = (key) => Object.prototype.hasOwnProperty.call(appConfig, key);
     const app = {
+      ...existing,
       id: appConfig.id,
       name: appConfig.name,
       command: appConfig.command,
-      cwd: appConfig.cwd || '',
-      preferredPort: appConfig.preferredPort || null,
-      fallbackRange: appConfig.fallbackRange || null,
-      env: appConfig.env || {},
-      autoStart: appConfig.autoStart || false,
-      isFavorite: appConfig.isFavorite || false,
-      group: appConfig.group || null,
-      color: appConfig.color || this.getRandomColor(),
-      createdAt: appConfig.createdAt || new Date().toISOString(),
+      cwd: has('cwd') ? (appConfig.cwd || '') : (existing.cwd || ''),
+      preferredPort: has('preferredPort') ? (appConfig.preferredPort || null) : (existing.preferredPort || null),
+      fallbackRange: has('fallbackRange') ? (appConfig.fallbackRange || null) : (existing.fallbackRange || null),
+      env: has('env') ? (appConfig.env || {}) : (existing.env || {}),
+      autoStart: has('autoStart') ? !!appConfig.autoStart : !!existing.autoStart,
+      isFavorite: has('isFavorite') ? !!appConfig.isFavorite : !!existing.isFavorite,
+      group: has('group') ? (appConfig.group || null) : (existing.group || null),
+      description: has('description') ? (appConfig.description || null) : (existing.description || null),
+      startupDelay: has('startupDelay') ? appConfig.startupDelay : (existing.startupDelay ?? null),
+      color: appConfig.color || existing.color || this.getRandomColor(),
+      createdAt: existing.createdAt || appConfig.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 

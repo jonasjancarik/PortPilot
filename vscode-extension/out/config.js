@@ -43,14 +43,18 @@ const os = __importStar(require("os"));
 function getConfigPath() {
     const platform = os.platform();
     let configDir;
+    // NOTE: must match Electron's app.getPath('userData'), which is derived from
+    // the lowercase package.json "name" ("portpilot"). Using "PortPilot" (capital)
+    // works on case-insensitive Windows but reads a DIFFERENT file on Linux/macOS,
+    // so the extension would never see the desktop app's config.
     if (platform === 'win32') {
-        configDir = path.join(process.env.APPDATA || '', 'PortPilot');
+        configDir = path.join(process.env.APPDATA || '', 'portpilot');
     }
     else if (platform === 'darwin') {
-        configDir = path.join(os.homedir(), 'Library', 'Application Support', 'PortPilot');
+        configDir = path.join(os.homedir(), 'Library', 'Application Support', 'portpilot');
     }
     else {
-        configDir = path.join(os.homedir(), '.config', 'PortPilot');
+        configDir = path.join(os.homedir(), '.config', 'portpilot');
     }
     return path.join(configDir, 'portpilot-config.json');
 }

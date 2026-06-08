@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; img-src 'self' data:">
   <title>PortPilot</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -73,14 +73,14 @@
       <div id="selection-toolbar" class="selection-toolbar hidden">
         <span id="selection-count" class="selection-count">0 selected</span>
         <div class="selection-actions">
-          <button type="button" class="btn btn-small btn-secondary" onclick="selectAllApps()">Select All</button>
-          <button type="button" class="btn btn-small btn-primary" onclick="favoriteSelected()">Favorite</button>
-          <button type="button" class="btn btn-small btn-secondary" onclick="unfavoriteSelected()">Unfavorite</button>
-          <select id="selection-group-select" class="btn btn-small btn-secondary" onchange="moveSelectedToGroup(this.value); this.selectedIndex = 0;" title="Move selected apps to a group">
+          <button type="button" class="btn btn-small btn-secondary" data-act="selectAllApps">Select All</button>
+          <button type="button" class="btn btn-small btn-primary" data-act="favoriteSelected">Favorite</button>
+          <button type="button" class="btn btn-small btn-secondary" data-act="unfavoriteSelected">Unfavorite</button>
+          <select id="selection-group-select" class="btn btn-small btn-secondary" data-change="moveSelectedToGroup" title="Move selected apps to a group">
             <option value="" disabled selected>Move to Group</option>
           </select>
-          <button type="button" class="btn btn-small btn-danger" onclick="deleteSelected()">Delete</button>
-          <button type="button" class="btn btn-small btn-secondary" onclick="clearSelection()">Clear</button>
+          <button type="button" class="btn btn-small btn-danger" data-act="deleteSelected">Delete</button>
+          <button type="button" class="btn btn-small btn-secondary" data-act="clearSelection">Clear</button>
         </div>
       </div>
     </main>
@@ -129,6 +129,25 @@
             <span>Stop running apps when quitting</span>
             <input type="checkbox" id="setting-stop-apps-on-quit" checked>
           </label>
+          <label class="setting-row">
+            <span>Auto-resize window to app count</span>
+            <input type="checkbox" id="setting-auto-resize">
+          </label>
+        </div>
+        <div class="settings-section" id="web-agent-section">
+          <h3>Web Access <span class="preview-tag">preview</span></h3>
+          <label class="setting-row">
+            <span>Open PortPilot in your browser (local web app)</span>
+            <input type="checkbox" id="setting-web-agent">
+          </label>
+          <div id="web-agent-info" class="web-agent-info hidden">
+            <code id="web-agent-url"></code>
+            <div class="button-row">
+              <button type="button" id="btn-open-web" class="btn btn-secondary btn-small">Open in Browser</button>
+              <button type="button" id="btn-copy-web" class="btn btn-secondary btn-small">Copy URL</button>
+            </div>
+            <p class="web-agent-note">Runs on 127.0.0.1 only, protected by a per-session token. See SECURITY.md.</p>
+          </div>
         </div>
         <div class="settings-section">
           <h3>Data</h3>
@@ -260,7 +279,7 @@
       <div class="modal-content modal-small">
         <div class="modal-header">
           <h2 id="group-modal-title">New Group</h2>
-          <button type="button" class="btn-close" onclick="closeGroupModal()" aria-label="Close"></button>
+          <button type="button" class="btn-close" data-act="closeGroupModal" aria-label="Close"></button>
         </div>
         <div class="form-group" style="padding: 16px 0 8px;">
           <label for="group-name-input">Group Name</label>
@@ -272,8 +291,32 @@
           <input type="hidden" id="group-color-input" value="">
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" onclick="closeGroupModal()">Cancel</button>
-          <button type="button" class="btn btn-primary" onclick="saveGroupModal()">Save</button>
+          <button type="button" class="btn btn-secondary" data-act="closeGroupModal">Cancel</button>
+          <button type="button" class="btn btn-primary" data-act="saveGroupModal">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Logs Modal -->
+    <div id="modal-logs" class="modal hidden">
+      <div class="modal-content modal-wide modal-logs">
+        <div class="modal-header">
+          <h2>Logs — <span id="logs-app-name"></span></h2>
+          <div class="logs-header-actions">
+            <label class="logs-autoscroll-label" title="Keep scrolled to newest output">
+              <input type="checkbox" id="logs-autoscroll" checked> Auto-scroll
+            </label>
+            <button type="button" class="btn btn-small btn-secondary" id="logs-refresh">Refresh</button>
+            <button type="button" class="btn btn-small btn-secondary" id="logs-copy">Copy</button>
+          </div>
+          <button type="button" class="btn-close" id="logs-close" aria-label="Close"></button>
+        </div>
+        <div class="logs-body">
+          <pre id="logs-stdout" class="logs-pre" aria-label="Standard output"></pre>
+          <div id="logs-stderr-section">
+            <div class="logs-section-label">stderr</div>
+            <pre id="logs-stderr" class="logs-pre logs-pre-err" aria-label="Standard error"></pre>
+          </div>
         </div>
       </div>
     </div>

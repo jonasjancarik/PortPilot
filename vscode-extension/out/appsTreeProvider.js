@@ -87,14 +87,18 @@ exports.AppTreeItem = AppTreeItem;
 class AppsTreeProvider {
     _onDidChangeTreeData = new vscode.EventEmitter();
     onDidChangeTreeData = this._onDidChangeTreeData.event;
-    activePorts = [];
-    refresh() {
-        this.activePorts = (0, portScanner_1.scanPorts)();
+    runningByAppId = new Map();
+    async refresh() {
+        const activePorts = await (0, portScanner_1.scanPorts)();
+        this.runningByAppId = await (0, portScanner_1.computeRunning)((0, config_1.readConfig)().apps, activePorts);
         this._onDidChangeTreeData.fire(undefined);
     }
-    setActivePorts(ports) {
-        this.activePorts = ports;
+    async setActivePorts(ports) {
+        this.runningByAppId = await (0, portScanner_1.computeRunning)((0, config_1.readConfig)().apps, ports);
         this._onDidChangeTreeData.fire(undefined);
+    }
+    getRunningByAppId() {
+        return this.runningByAppId;
     }
     getTreeItem(element) {
         return element;
@@ -113,7 +117,7 @@ class AppsTreeProvider {
             return a.name.localeCompare(b.name);
         });
         const makeAppItem = (app) => {
-            const matched = this.activePorts.find(p => p.port === app.preferredPort);
+            const matched = this.runningByAppId.get(app.id);
             return new AppTreeItem(app, matched);
         };
         // If no groups, return flat list
