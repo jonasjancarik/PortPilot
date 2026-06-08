@@ -103,6 +103,7 @@
         <a href="#shortcuts" class="nav-link" role="menuitem">Shortcuts</a>
         <a href="#vscode" class="nav-link" role="menuitem">VS Code</a>
         <a href="#mcp" class="nav-link" role="menuitem">AI Agent</a>
+        <a href="#security" class="nav-link" role="menuitem">Security</a>
         <a href="#download" class="nav-link nav-link-download" role="menuitem">Download</a>
       </div>
     </div>
@@ -422,6 +423,64 @@
             <a href="https://github.com/m4cd4r4/PortPilot/tree/master/mcp-server" class="btn btn-small" rel="noopener">Setup Guide</a>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- Security Section -->
+    <section class="security-section" id="security" aria-labelledby="security-heading">
+      <div class="container">
+        <h2 id="security-heading">Security</h2>
+        <p class="section-subtitle">How the web portal is protected, in plain terms, and the honest limits</p>
+
+        <div class="security-intro">
+          <p>PortPilot's optional web portal can run the dev commands you configure, so it treats its API as a high-value target and defends it with several independent layers. The residual risk, a leaked token or malware already running as you, is the same trust boundary as any program you launch: anything running under your user account can already read your files and run commands. <strong>PortPilot adds defences on top of that boundary; it does not widen it.</strong> The desktop app opens no network port at all; only the opt-in web portal does, and it binds to your machine alone.</p>
+        </div>
+
+        <h3 class="platform-heading">Defence layers</h3>
+        <div class="security-layers">
+          <div class="command-item"><strong>Loopback only</strong> binds 127.0.0.1, so it is unreachable from the network or LAN.</div>
+          <div class="command-item"><strong>Per-session token</strong> a fresh 256-bit token gates every request; a web page can neither read nor guess it.</div>
+          <div class="command-item"><strong>Anti DNS-rebinding</strong> a Host-header allowlist rejects spoofed hosts before any handler runs.</div>
+          <div class="command-item"><strong>Locked CORS</strong> reflects only the portal's own origin, never a wildcard.</div>
+          <div class="command-item"><strong>CSRF-resistant</strong> a custom header forces a CORS preflight that foreign sites fail.</div>
+          <div class="command-item"><strong>Strict CSP</strong> script-src 'self' blocks remote and inline scripts, closing the XSS-to-exec path.</div>
+        </div>
+
+        <h3 class="platform-heading">Frequently asked</h3>
+        <div class="security-faq">
+          <details>
+            <summary>Can a website on the internet reach the portal?</summary>
+            <p>No. It binds to 127.0.0.1 only, so nothing off your machine can connect. And even a malicious site open in your own browser is stopped by the Host-header allowlist (which defeats DNS-rebinding tricks) plus a per-session token it cannot read.</p>
+          </details>
+          <details>
+            <summary>What stops another tab or site in my browser from driving it?</summary>
+            <p>The portal serves its UI with a per-session token embedded in that page. The browser's same-origin policy means a different site cannot read the token, and CORS is locked to the portal's own origin, so cross-origin calls are rejected before they reach the API.</p>
+          </details>
+          <details>
+            <summary>What does the token protect, and where is it stored?</summary>
+            <p>The token is the single gate to the API, which can run your configured commands. It is a fresh 256-bit random value generated per session, written to <code>agent.json</code> in your per-user config directory and removed on a clean exit.</p>
+          </details>
+          <details>
+            <summary>I'm on a shared or work machine. Who else can read the token?</summary>
+            <p>Other user accounts cannot: <code>agent.json</code> lives in your per-user config directory, whose OS permissions deny other users (on Linux and macOS it is additionally written <code>chmod 600</code>; on Windows the per-user <code>%APPDATA%</code> ACL does this job). But any process running as <em>you</em> can read it, exactly like your own files. If you do not trust other software running under your account, leave the portal off.</p>
+          </details>
+          <details>
+            <summary>Is it safe to leave running?</summary>
+            <p>The listener is loopback-only and token-gated, and the web portal is opt-in (off by default). Leaving it on while you work is reasonable; if you prefer a smaller exposure window, stop it when you are done.</p>
+          </details>
+          <details>
+            <summary>Why is there no HTTPS?</summary>
+            <p>Loopback (127.0.0.1) is already treated as a secure context by browsers, and traffic never leaves your machine, so TLS adds nothing here. A self-signed certificate could be added if you want one.</p>
+          </details>
+          <details>
+            <summary>So it can run code on my machine, by design?</summary>
+            <p>Yes. PortPilot exists to start and stop your dev servers, which means running commands as you, the same power as opening a terminal. The layers above ensure that only you, holding the token, on your own machine, can trigger it. This is inherent to the tool, not a flaw, and it is the same exposure the desktop app has always had.</p>
+          </details>
+        </div>
+
+        <p class="security-more">Full technical threat model, verified behaviour, and known limitations:
+          <a href="https://github.com/m4cd4r4/PortPilot/blob/master/SECURITY.md" class="btn btn-small" rel="noopener">Read SECURITY.md</a>
+        </p>
       </div>
     </section>
 
