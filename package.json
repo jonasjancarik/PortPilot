@@ -55,6 +55,17 @@
       "public/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "mcp-server",
+        "to": "mcp-server",
+        "filter": [
+          "**/*",
+          "!**/*.md",
+          "!**/.git/**"
+        ]
+      }
+    ],
     "win": {
       "target": [
         {

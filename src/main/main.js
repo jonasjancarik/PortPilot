@@ -6,6 +6,7 @@ const { ConfigStore } = require('./configStore');
 let mainWindow = null;
 let tray = null;
 let webAgent = null;  // opt-in loopback web agent (Option C), shares this process's configStore
+let mcpServer = null; // shared HTTP MCP server: one process for every Claude session, vs one stdio child per session
 
 /** Create the main application window */
 function createWindow(configStore) {
@@ -153,6 +154,32 @@ if (!gotTheLock) {
     createTray();
     setupIpcHandlers(ipcMain, configStore);
 
+    // ============ Shared MCP HTTP server ============
+    // One long-lived process serving every Claude session over HTTP, instead of
+    // each session spawning its own stdio child. Register clients against
+    // http://127.0.0.1:<port>/mcp (default 8788).
+    // Forked via ELECTRON_RUN_AS_NODE so Electron's bundled Node runs the ESM
+    // server (utilityProcess.fork can't load an ESM entry).
+    try {
+      const { fork } = require('child_process');
+      const mcpEntry = app.isPackaged
+        ? path.join(process.resourcesPath, 'mcp-server', 'index.js')
+        : path.join(__dirname, '..', '..', 'mcp-server', 'index.js');
+      const mcpPort = process.env.PORTPILOT_MCP_PORT || '8788';
+      mcpServer = fork(mcpEntry, ['--port', mcpPort], {
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+        stdio: ['ignore', 'ignore', 'inherit', 'ipc'],
+      });
+      mcpServer.on('error', (err) => console.error('MCP server failed to start:', err));
+      mcpServer.on('exit', (code) => {
+        if (code) console.error(`PortPilot MCP server exited with code ${code}`);
+        mcpServer = null;
+      });
+      console.log(`PortPilot MCP HTTP server starting on port ${mcpPort}`);
+    } catch (err) {
+      console.error('Failed to start MCP HTTP server:', err);
+    }
+
     // Tray update - renderer sends running apps list whenever state changes
     ipcMain.handle('tray:update', (event, runningApps) => {
       try {
@@ -230,6 +257,12 @@ app.on('before-quit', async (event) => {
   if (webAgent) {
     try { await webAgent.stop(); } catch (err) { console.error('Error stopping web agent:', err); }
     webAgent = null;
+  }
+
+  // Stop the shared MCP HTTP server
+  if (mcpServer) {
+    try { mcpServer.kill(); } catch (err) { console.error('Error stopping MCP server:', err); }
+    mcpServer = null;
   }
 
   // Clean up child processes if enabled in settings

@@ -793,6 +793,11 @@ async function startHttp(port, host) {
     await transport.handleRequest(req, res, body);
   });
 
+  httpServer.on('error', (err) => {
+    console.error(`PortPilot MCP HTTP server error: ${err.message}`);
+    if (err.code === 'EADDRINUSE') process.exit(1);
+  });
+
   httpServer.listen(port, host, () => {
     console.error(`PortPilot MCP Server (http) on http://${host}:${port}/mcp`);
   });
