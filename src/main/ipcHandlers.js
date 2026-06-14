@@ -463,6 +463,15 @@ function setupIpcHandlers(ipcMain, configStore) {
   ipcMain.handle('config:updateSettings', async (_, newSettings) => {
     try {
       const settings = configStore.updateSettings(newSettings);
+      // Apply "start on login" to the OS only in the packaged app; in dev the
+      // exec path is electron.exe, which would leave a junk startup entry.
+      if (Object.prototype.hasOwnProperty.call(newSettings, 'openAtLogin')) {
+        const { app } = require('electron');
+        if (app.isPackaged) {
+          try { app.setLoginItemSettings({ openAtLogin: !!newSettings.openAtLogin }); }
+          catch (e) { console.error('setLoginItemSettings failed:', e.message); }
+        }
+      }
       return { success: true, settings };
     } catch (error) {
       return { success: false, error: error.message };

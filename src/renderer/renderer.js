@@ -1916,6 +1916,7 @@ async function loadSettings() {
     document.getElementById('setting-close-to-tray').checked = state.settings.closeToTray !== false;
     document.getElementById('setting-stop-apps-on-quit').checked = state.settings.stopAppsOnQuit !== false;
     document.getElementById('setting-auto-resize').checked = state.settings.autoResizeWindow === true;
+    document.getElementById('setting-open-at-login').checked = state.settings.openAtLogin !== false;
     state.favoritesExpanded = result.settings.favoritesExpanded !== false;
     state.otherProjectsExpanded = result.settings.otherProjectsExpanded !== false;
     const pge = result.settings.portGroupExpanded;
@@ -1937,7 +1938,8 @@ async function saveSettings() {
     openDevTools: document.getElementById('setting-devtools').checked,
     closeToTray: document.getElementById('setting-close-to-tray').checked,
     stopAppsOnQuit: document.getElementById('setting-stop-apps-on-quit').checked,
-    autoResizeWindow: document.getElementById('setting-auto-resize').checked
+    autoResizeWindow: document.getElementById('setting-auto-resize').checked,
+    openAtLogin: document.getElementById('setting-open-at-login').checked
   };
   await window.portpilot.config.updateSettings(settings);
   state.settings = settings;

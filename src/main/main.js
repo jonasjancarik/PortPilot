@@ -154,6 +154,16 @@ if (!gotTheLock) {
     createTray();
     setupIpcHandlers(ipcMain, configStore);
 
+    // Reflect the persisted "start on login" preference (default on). Packaged
+    // only - in dev the exec path is electron.exe and would pollute startup.
+    if (app.isPackaged) {
+      try {
+        app.setLoginItemSettings({ openAtLogin: configStore.getSettings().openAtLogin !== false });
+      } catch (err) {
+        console.error('Failed to apply login item settings:', err);
+      }
+    }
+
     // ============ Shared MCP HTTP server ============
     // One long-lived process serving every Claude session over HTTP, instead of
     // each session spawning its own stdio child. Register clients against
