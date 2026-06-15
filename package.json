@@ -57,13 +57,16 @@
     ],
     "extraResources": [
       {
-        "from": "mcp-server",
-        "to": "mcp-server",
-        "filter": [
-          "**/*",
-          "!**/*.md",
-          "!**/.git/**"
-        ]
+        "from": "mcp-server/index.js",
+        "to": "mcp-server/index.js"
+      },
+      {
+        "from": "mcp-server/package.json",
+        "to": "mcp-server/package.json"
+      },
+      {
+        "from": "mcp-server/node_modules",
+        "to": "mcp-server/node_modules"
       }
     ],
     "win": {
