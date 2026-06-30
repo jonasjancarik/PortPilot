@@ -16,7 +16,7 @@ const { scanPorts, checkPort, findAvailablePort } = require('../main/portScanner
 const {
   startApp, stopApp, killProcess, killByPort, getRunningApps, getAppLogs
 } = require('../main/processManager');
-const { matchPortsToApps, getProcessDetails } = require('../main/ipcHandlers');
+const { matchPortsToApps, getProcessDetails, detectWorktrees } = require('../main/ipcHandlers');
 
 function createDispatcher(configStore) {
   const handlers = {
@@ -79,6 +79,9 @@ function createDispatcher(configStore) {
     'config:getGroups': async () => ({ success: true, groups: configStore.getGroups() }),
     'config:saveGroup': async (groupConfig) => ({ success: true, group: configStore.saveGroup(groupConfig) }),
     'config:deleteGroup': async (groupId) => { configStore.deleteGroup(groupId); return { success: true }; },
+
+    // ---- Worktrees ----
+    'worktrees:detect': async (appId) => detectWorktrees(configStore, appId),
 
     // ---- Discovery ----
     'discovery:scan': async (scanPaths) => {

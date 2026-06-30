@@ -280,7 +280,10 @@ function setupDelegation() {
     clearSelection: () => clearSelection(),
     closeGroupModal: () => closeGroupModal(),
     saveGroupModal: () => saveGroupModal(),
-    closeAppDrawer: () => closeAppDrawer()
+    closeAppDrawer: () => closeAppDrawer(),
+    detectWorktrees: el => detectWorktrees(el.dataset.id),
+    confirmAddWorktrees: () => confirmAddWorktrees(),
+    closeWorktreesModal: () => closeWorktreesModal()
   };
   const CHANGE = {
     toggleAppSelection: el => toggleAppSelection(el.dataset.id),
@@ -434,6 +437,7 @@ function setupEventListeners() {
         closeModal();
         closeGroupModal();
         closeDeleteConfirm();
+        closeWorktreesModal();
         closeSettings();
         closeLogs();
         document.getElementById('modal-discoveries').classList.add('hidden');
@@ -471,6 +475,7 @@ function setupEventListeners() {
       closeDeleteConfirm();
       closeSettings();
       closeAppDrawer();
+      closeWorktreesModal();
       document.getElementById('modal-discoveries').classList.add('hidden');
     }
   });
@@ -1414,6 +1419,7 @@ function openAppDrawer(appId) {
     app.cwd ? `<button class="btn btn-secondary" data-act="openAppFolder" data-id="${app.id}">${icon('folder', 12)} Folder</button>` : '',
     `<button class="btn btn-secondary" data-act="copyCmdPath" data-cmd="${escapeHtml(app.command)}">${icon('copy', 12)} Copy cmd</button>`,
     !app.parentId ? `<button class="btn btn-secondary" data-act="addBranch" data-id="${app.id}">${icon('branch', 12)} Add branch</button>` : '',
+    !app.parentId ? `<button class="btn btn-secondary" data-act="detectWorktrees" data-id="${app.id}">${icon('branch', 12)} Add worktrees</button>` : '',
     `<button class="btn btn-secondary" data-act="editApp" data-id="${app.id}">${icon('edit', 12)} Edit</button>`,
     `<button class="btn btn-secondary" data-act="deleteApp" data-id="${app.id}">${icon('trash', 12)} Delete</button>`,
   ].filter(Boolean).join('');
@@ -1433,6 +1439,68 @@ function closeAppDrawer() {
   document.getElementById('app-drawer-backdrop').classList.add('hidden');
   document.getElementById('app-drawer').classList.add('hidden');
   renderApps();
+}
+
+// ---- Slice 9: detect a repo's git worktrees and bulk-add them as branches ----
+let worktreeCtx = null; // { parent, candidates }
+
+async function detectWorktrees(appId) {
+  const res = await window.portpilot.worktrees.detect(appId);
+  if (!res.success) { showToast(res.error || 'Could not detect worktrees', 'error'); return; }
+  const addable = res.candidates.filter(c => !c.registered);
+  if (res.candidates.length === 0) { showToast('No other worktrees found for this repo', 'info'); return; }
+  if (addable.length === 0) { showToast('All worktrees of this repo are already added', 'info'); return; }
+  worktreeCtx = res;
+  openWorktreesModal(res);
+}
+
+function openWorktreesModal(ctx) {
+  document.getElementById('worktrees-count').textContent = `${ctx.candidates.length} found`;
+  const list = document.getElementById('worktrees-list');
+  list.innerHTML = ctx.candidates.map((c, i) => {
+    const swatch = c.color ? `<span class="wt-swatch" style="background:${c.color}" title="${c.colorSource === 'peacock' ? 'Peacock colour' : 'colour'}"></span>` : '';
+    return `
+      <label class="discovery-item ${c.registered ? 'wt-registered' : ''}">
+        <input type="checkbox" data-wt-index="${i}" ${c.registered ? 'disabled' : 'checked'}>
+        ${swatch}
+        <span class="wt-branch">${c.branch ? escapeHtml(c.branch) : '(detached)'}</span>
+        <span class="wt-path">${escapeHtml(c.path)}</span>
+        ${c.registered ? '<span class="wt-badge">already added</span>' : ''}
+      </label>`;
+  }).join('');
+  document.getElementById('modal-worktrees').classList.remove('hidden');
+}
+
+function closeWorktreesModal() {
+  document.getElementById('modal-worktrees').classList.add('hidden');
+  worktreeCtx = null;
+}
+
+async function confirmAddWorktrees() {
+  if (!worktreeCtx) return;
+  const checks = [...document.querySelectorAll('#worktrees-list input[type="checkbox"]:checked')];
+  const picked = checks.map(c => worktreeCtx.candidates[Number(c.dataset.wtIndex)]).filter(Boolean);
+  if (picked.length === 0) { showToast('Select at least one worktree', 'info'); return; }
+
+  const parent = worktreeCtx.parent;
+  let added = 0;
+  for (const c of picked) {
+    const cfg = {
+      name: parent.name,
+      command: parent.command || 'npm run dev',
+      cwd: c.path,
+      parentId: parent.id,
+      branch: c.branch || null,
+      worktreePath: c.path,
+      preferredPort: null,
+    };
+    if (c.color) { cfg.color = c.color; cfg.colorSource = c.colorSource || 'peacock'; }
+    const r = await window.portpilot.config.saveApp(cfg);
+    if (r.success) added++;
+  }
+  closeWorktreesModal();
+  await loadApps();
+  showToast(`Added ${added} worktree${added !== 1 ? 's' : ''}`, 'success');
 }
 
 // Keyboard activation for app cards (Enter/Space toggles details), but only when

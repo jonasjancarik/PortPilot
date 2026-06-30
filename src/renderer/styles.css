@@ -1402,6 +1402,40 @@ body {
   background: color-mix(in srgb, var(--accent-primary) 10%, var(--card-bg));
 }
 
+/* Worktree picker rows (Slice 9) */
+.wt-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.wt-branch {
+  font-weight: 600;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.wt-path {
+  color: var(--text-muted);
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.wt-badge {
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+.discovery-item.wt-registered {
+  opacity: 0.55;
+}
+
 /* ============ Settings Panel ============ */
 .settings-backdrop {
   position: fixed;

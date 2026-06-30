@@ -270,6 +270,22 @@
       </div>
     </div>
 
+    <!-- Detect Worktrees Modal -->
+    <div id="modal-worktrees" class="modal hidden">
+      <div class="modal-content modal-wide">
+        <div class="modal-header">
+          <h2>Add Worktrees</h2>
+          <span id="worktrees-count" class="count-badge">0 found</span>
+          <button type="button" class="btn-close" data-act="closeWorktreesModal" aria-label="Close"></button>
+        </div>
+        <div class="discoveries-list" id="worktrees-list"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-act="closeWorktreesModal">Cancel</button>
+          <button type="button" class="btn btn-primary" data-act="confirmAddWorktrees">Add Selected</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Delete App Confirmation Modal -->
     <div id="modal-delete-confirm" class="modal hidden">
       <div class="modal-content modal-danger">
