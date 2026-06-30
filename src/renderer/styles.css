@@ -1166,25 +1166,46 @@ body {
   white-space: nowrap;
 }
 
-/* App actions */
-.app-actions {
+/* App actions - both groups are now hover/focus/selection-revealed so resting
+   rows are calm (status dot + name + chips only). The status dot already shows
+   running state, so hiding Stop until hover loses no information. */
+.app-actions,
+.app-actions-visible {
   display: flex;
-  gap: 3px;
+  gap: 2px;
   flex-shrink: 0;
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity 0.12s;
 }
 
-.app-card:hover .app-actions {
+.app-card:hover .app-actions,
+.app-card:focus-within .app-actions,
+.app-card.selected .app-actions,
+.app-card:hover .app-actions-visible,
+.app-card:focus-within .app-actions-visible,
+.app-card.selected .app-actions-visible {
   opacity: 1;
 }
 
-/* Context menu trigger (always visible) */
-.app-actions-visible {
-  display: flex;
-  gap: 3px;
-  flex-shrink: 0;
+/* Tone down: in-row actions are ghost icon buttons - transparent until hovered,
+   semantic colour only on the button you're pointing at (Better Stack / Linear). */
+.app-actions .btn,
+.app-actions-visible .btn {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-secondary);
+  padding: 2px 4px;
 }
+
+.app-actions .btn:hover,
+.app-actions-visible .btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.app-actions-visible .btn-success:hover { color: var(--accent-green); }
+.app-actions-visible .btn-danger:hover,
+.app-actions-visible .btn-warning:hover { color: var(--accent-red); }
 
 /* Expand indicator */
 .expand-indicator {
