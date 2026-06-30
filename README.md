@@ -12,13 +12,14 @@
 [![MCP](https://img.shields.io/badge/MCP-enabled-purple.svg)](mcp-server/README.md)
 [![VS Code Marketplace](https://vsmarketplacebadges.dev/version-short/macdara.portpilot.svg)](https://marketplace.visualstudio.com/items?itemName=macdara.portpilot)
 
-![PortPilot](docs/portpilot-demo.gif)
+![PortPilot](docs/ui-redesign/wave3-hero-web.png)
 
 ---
 
 ## 📑 Table of Contents
 
 - [✨ AI Agent Integration](#-ai-agent-integration)
+- [What's New in v3.2.0](#whats-new-in-v320)
 - [What's New in v3.1.0](#whats-new-in-v310)
 - [What's New in v3.0.0](#whats-new-in-v300)
 - [What's New in v2.0.0](#whats-new-in-v200)
@@ -362,7 +363,7 @@ If multiple detectors match, the highest-priority one wins.
 
 Explore all PortPilot features including app management, the Active Ports scanner, Settings panel, multiple themes, and more.
 
-![PortPilot Features](docs/portpilot-demo.gif)
+![PortPilot Features](docs/ui-redesign/wave3-hero-web.png)
 
 ## Installation
 
