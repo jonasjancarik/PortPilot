@@ -54,6 +54,7 @@ const state = {
   selectedApps: new Set(),
   selectedProjects: new Set(),
   drawerAppId: null,
+  staleApps: new Set(),
   expandedPorts: new Map(),
   portsCollapsed: false,
   portGroupExpanded: { dev: true, other: true, system: false },
@@ -743,14 +744,16 @@ async function openInBrowser(appId) {
 // ============ App Operations ============
 async function loadApps() {
   try {
-    const [configResult, groupsResult, runningResult, scanResult] = await Promise.all([
+    const [configResult, groupsResult, runningResult, scanResult, staleResult] = await Promise.all([
       window.portpilot.config.getApps(),
       window.portpilot.config.getGroups(),
       window.portpilot.process.list(),
-      window.portpilot.ports.scanWithApps()
+      window.portpilot.ports.scanWithApps(),
+      window.portpilot.worktrees.stale()
     ]);
 
     if (configResult.success) state.apps = configResult.apps;
+    if (staleResult && staleResult.success) state.staleApps = new Set(staleResult.ids);
     if (groupsResult.success) state.groups = groupsResult.groups;
     if (runningResult.success) state.runningApps = runningResult.apps;
     if (scanResult.success) {
@@ -1013,6 +1016,7 @@ function renderAppCard(app, branchCount = 0) {
 
   const isSelected = state.selectedApps.has(app.id);
   const isActive = state.drawerAppId === app.id;
+  const isStale = state.staleApps.has(app.id);
 
   // Action buttons
   let actionsHtml = '';
@@ -1031,7 +1035,7 @@ function renderAppCard(app, branchCount = 0) {
   }
 
   return `
-    <div class="app-card ${isSelected ? 'selected' : ''} ${isActive ? 'drawer-open' : ''} ${isBranch ? 'is-branch' : ''}"
+    <div class="app-card ${isSelected ? 'selected' : ''} ${isActive ? 'drawer-open' : ''} ${isBranch ? 'is-branch' : ''} ${isStale ? 'is-stale' : ''}"
          data-id="${app.id}"
          ${isBranch ? `style="--branch-color:${app.color}"` : ''}
          draggable="true"
@@ -1057,6 +1061,7 @@ function renderAppCard(app, branchCount = 0) {
         <span class="app-name-text">${escapeHtml(app.name)}</span>
         ${app.branch ? `<span class="branch-chip" style="--branch-color:${app.color}" title="Branch / worktree">${icon('branch', 11)}${escapeHtml(app.branch)}</span>` : ''}
         ${branchCount > 0 ? `<span class="branch-count" title="${branchCount} branch${branchCount !== 1 ? 'es' : ''}">${icon('branch', 10)}${branchCount}</span>` : ''}
+        ${isStale ? `<span class="stale-badge" title="Worktree folder is gone - safe to remove">stale</span>` : ''}
         ${portHtml}
         ${countdownHtml}
         ${statsHtml}
@@ -1424,7 +1429,14 @@ function openAppDrawer(appId) {
     `<button class="btn btn-secondary" data-act="deleteApp" data-id="${app.id}">${icon('trash', 12)} Delete</button>`,
   ].filter(Boolean).join('');
 
+  const stale = state.staleApps.has(app.id);
+  const staleBanner = stale
+    ? `<div class="drawer-stale">Worktree folder is gone (<span class="mono">${escapeHtml(app.worktreePath || app.cwd || '')}</span>). Safe to remove this entry.
+         <button class="btn btn-danger" data-act="deleteApp" data-id="${app.id}">${icon('trash', 12)} Remove entry</button></div>`
+    : '';
+
   document.getElementById('app-drawer-body').innerHTML = `
+    ${staleBanner}
     <div class="drawer-actions-primary">${primary}</div>
     <div class="drawer-fields">${fields}</div>
     <div class="drawer-actions">${secondary}</div>`;

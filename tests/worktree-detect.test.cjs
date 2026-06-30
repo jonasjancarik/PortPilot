@@ -10,7 +10,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execSync } = require('node:child_process');
-const { detectWorktrees } = require('../src/main/ipcHandlers');
+const { detectWorktrees, detectStaleWorktrees } = require('../src/main/ipcHandlers');
 
 let pass = 0, fail = 0;
 function t(name, fn) {
@@ -68,6 +68,17 @@ try {
   t('errors cleanly for a non-git directory', () => {
     const res = detectWorktrees(store([{ id: 'p', name: 'X', cwd: base }]), 'p');
     assert.equal(res.success, false);
+  });
+
+  t('detectStaleWorktrees flags a branch whose folder is gone, not live ones or plain apps', () => {
+    const gone = path.join(base, 'removed-worktree');
+    const res = detectStaleWorktrees(store([
+      { id: 'live', name: 'Repo', branch: 'feat/detect', parentId: 'p', cwd: wt, worktreePath: wt }, // exists
+      { id: 'gone', name: 'Repo', branch: 'feat/old', parentId: 'p', cwd: gone, worktreePath: gone }, // missing
+      { id: 'plain', name: 'PlainApp', cwd: path.join(base, 'also-missing') }, // not a worktree -> ignored
+    ]));
+    assert.equal(res.success, true);
+    assert.deepEqual(res.ids, ['gone']);
   });
 } finally {
   try { g(`git worktree remove "${wt}" --force`, repo); } catch { /* best effort */ }

@@ -79,6 +79,25 @@ function detectWorktrees(configStore, appId) {
   }
 }
 
+// Find branch/worktree apps whose working directory is gone (worktree removed),
+// so the UI can flag them stale and offer one-click removal. A plain app with a
+// missing cwd is left alone - only worktree-linked entries (parentId or
+// worktreePath) are pruning candidates.
+function detectStaleWorktrees(configStore) {
+  try {
+    const ids = configStore.getApps()
+      .filter((a) => {
+        const isWorktree = !!(a.parentId || a.worktreePath);
+        const dir = a.worktreePath || a.cwd;
+        return isWorktree && dir && !fs.existsSync(dir);
+      })
+      .map((a) => a.id);
+    return { success: true, ids };
+  } catch (error) {
+    return { success: false, error: error.message, ids: [] };
+  }
+}
+
 /**
  * Get detailed process information (memory, uptime, connections)
  * @param {number} pid - Process ID
@@ -521,6 +540,9 @@ function setupIpcHandlers(ipcMain, configStore) {
    */
   ipcMain.handle('worktrees:detect', async (_, appId) => detectWorktrees(configStore, appId));
 
+  /** Return ids of branch/worktree apps whose worktree folder no longer exists. */
+  ipcMain.handle('worktrees:stale', async () => detectStaleWorktrees(configStore));
+
   /** Delete an app config */
   ipcMain.handle('config:deleteApp', async (_, appId) => {
     try {
@@ -894,4 +916,4 @@ function setupIpcHandlers(ipcMain, configStore) {
   });
 }
 
-module.exports = { setupIpcHandlers, matchPortsToApps, getProcessDetails, detectWorktrees };
+module.exports = { setupIpcHandlers, matchPortsToApps, getProcessDetails, detectWorktrees, detectStaleWorktrees };

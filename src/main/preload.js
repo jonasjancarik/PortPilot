@@ -43,7 +43,8 @@ contextBridge.exposeInMainWorld('portpilot', {
 
   // Worktree operations
   worktrees: {
-    detect: (appId) => ipcRenderer.invoke('worktrees:detect', appId)
+    detect: (appId) => ipcRenderer.invoke('worktrees:detect', appId),
+    stale: () => ipcRenderer.invoke('worktrees:stale')
   },
 
   // Discovery operations

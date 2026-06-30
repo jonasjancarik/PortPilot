@@ -112,9 +112,14 @@ Data model (all optional, backward-compatible additions to the app record):
 | 9 | Worktree auto-detect | desktop + main | `git worktree list --porcelain` from a registered app's cwd enumerates worktrees + branches; primary worktree = parent; an "Add worktrees" action lists unregistered ones. New IPC handler. | M | **done** (2026-06-30) |
 | 10 | Peacock colour sync | desktop + main | Read `<worktree>/.vscode/settings.json` -> `peacock.color` (fallback `workbench.colorCustomizations`); use as row accent so PortPilot row == the VS Code window colour. `colorSource:'peacock'`. | S | later |
 | 11 | MCP `add_worktree` + skill | mcp + skill | Extend MCP so Claude registers the current worktree under its parent on a given port (resolving git + Peacock). Wire the `/new-worktree` skill to call it on mint - kills the manual "load in localhost" prompting. | M | **done** (2026-06-30) |
-| 12 | Stale pruning | desktop + main | On scan, if a child's `worktreePath` is gone from `git worktree list`, badge "stale (worktree removed)" + one-click remove. Ties into the existing `wt-cleanup` hook. | S | later |
+| 12 | Stale pruning | desktop + main | On scan, if a child's `worktreePath` is gone from `git worktree list`, badge "stale (worktree removed)" + one-click remove. Ties into the existing `wt-cleanup` hook. | S | **done** (2026-06-30) |
 
 Wave 3 gate: Slice 8 ships and proves the model before scoping 9-12. Slices 9-12 are independent enough to parallelise once 8 lands.
+
+**Wave 3 complete (2026-06-30):** slices 8, 11, 3, 9, 6, 12 all landed; Slice 10 (Peacock colour) delivered via mint + detect (only optional re-sync-on-scan deferred). Desktop app and web portal share the renderer verbatim, so all renderer-side work applies to both; the VS Code extension tree views got the shared model in slice 6.
+
+#### Slice 12 landed (2026-06-30)
+On load, `worktrees:stale` (shared `detectStaleWorktrees` in ipcHandlers, wired into IPC + agent dispatch + web shim) returns the ids of branch/worktree apps whose folder is gone (`worktreePath`/`cwd` missing; plain apps are never flagged). Those rows get a red `STALE` badge with a struck-through name, and their drawer shows a "Worktree folder is gone - safe to remove" banner with a one-click **Remove entry**. Test: `tests/worktree-detect.test.cjs` (+1 case). Verified live (removed `portpilot-wt2` on disk -> its entry flagged stale in the portal).
 
 #### Slice 8 landed (2026-06-30)
 Hierarchy + manual branch on the desktop renderer. Children nest under the parent in an `.app-tree`, excluded from top-level lists, with a colour-railed branch chip and a parent "N branches" count; "+ branch" opens the Add App modal in branch mode pre-linked to the parent. Verified via `tests/visual-branches.js` (real Electron, seeded parent+2 branches). The web portal serves the renderer verbatim, so it inherits this. Slice 7 (web parity) is therefore largely covered for this feature.
