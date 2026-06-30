@@ -15,6 +15,11 @@ export interface PortPilotApp {
   color: string;
   description?: string;
   group?: string | null;
+  // Worktree / branch awareness (Wave 3). Optional; absent on plain apps.
+  parentId?: string | null;
+  branch?: string | null;
+  worktreePath?: string | null;
+  colorSource?: 'peacock' | 'manual' | 'auto' | null;
   createdAt: string;
   updatedAt: string;
 }
