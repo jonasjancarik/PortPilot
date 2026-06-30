@@ -94,6 +94,28 @@ If a true single-list merge is ever wanted, it belongs in its own phase with the
 | 6 | VS Code parity | vscode | Apply the shared model to both tree views: status `ThemeIcon` coloured by `ThemeColor`, label + dimmed description ("node :3000" + "PID 18244 - next dev"), grouping with System collapsed, kill gated behind `contextValue`. Feed running count to the "PP: N running" item. Keep the tree in the narrow sidebar (no third pane). | M | later |
 | 7 | Web portal verify | web | Confirm the portal inherits grouping, status dots, unified list, and drawer once the renderer updates. Verify per-theme status CSS vars and collapse/pin/filter state read correctly over the loopback agent. | S | later |
 
+### Wave 3 - worktree & branch awareness (NEW track, sequenced after/alongside Wave 2)
+
+The problem: most real dev work happens in a git worktree or branch that runs on a *different* port than the one configured on the main app. PortPilot shows the configured app as "stopped" and the user falls back to manually prompting Claude to "load in localhost". Worktrees are invisible.
+
+The insight: matching is already **cwd-keyed** (`matchPortsToApps` in `src/main/ipcHandlers.js` L168 - Phase 1 matches when the app's `cwd` appears in the running command line; Phase 2 validates `preferredPort` against cwd/keywords). A worktree has a distinct cwd, so a worktree registered as its own app *already* gets detected on whatever port it grabbed, distinct from main and simultaneously. The missing pieces are hierarchy, detection, colour, and a register-from-Claude path - not new matching logic.
+
+Data model (all optional, backward-compatible additions to the app record):
+- `parentId` - id of the main project app (null = top-level project; the primary worktree is the natural parent)
+- `branch` - branch name string, e.g. `feat/wave2` (display label)
+- `worktreePath` - worktree's absolute path (= cwd; explicit semantic for detection/pruning)
+- `colorSource` - `peacock | manual | auto` (so a Peacock-synced colour re-syncs while a hand-set one stays put)
+
+| # | Slice (vertical) | Surface | Scope | Effort | Status |
+|---|---|---|---|---|---|
+| 8 | Hierarchy + manual branch | desktop (core/config/renderer) | `parentId`/`branch` persisted in config; children render indented under parent with a branch chip coloured by app colour, excluded from top-level lists; "+ branch" action on a parent opens the Add App modal pre-filled (parent's command/cwd, parentId set, branch field). Matching already distinguishes them. Shippable proof: two branches of one repo run side-by-side. | M | **in progress** (2026-06-30) |
+| 9 | Worktree auto-detect | desktop + main | `git worktree list --porcelain` from a registered app's cwd enumerates worktrees + branches; primary worktree = parent; an "Add worktrees" action lists unregistered ones. New IPC handler. | M | later |
+| 10 | Peacock colour sync | desktop + main | Read `<worktree>/.vscode/settings.json` -> `peacock.color` (fallback `workbench.colorCustomizations`); use as row accent so PortPilot row == the VS Code window colour. `colorSource:'peacock'`. | S | later |
+| 11 | MCP `add_worktree` + skill | mcp + skill | Extend MCP so Claude registers the current worktree under its parent on a given port (resolving git + Peacock). Wire the `/new-worktree` skill to call it on mint - kills the manual "load in localhost" prompting. | M | later |
+| 12 | Stale pruning | desktop + main | On scan, if a child's `worktreePath` is gone from `git worktree list`, badge "stale (worktree removed)" + one-click remove. Ties into the existing `wt-cleanup` hook. | S | later |
+
+Wave 3 gate: Slice 8 ships and proves the model before scoping 9-12. Slices 9-12 are independent enough to parallelise once 8 lands.
+
 ## What this plan does NOT cover
 
 - A framework migration (staying vanilla HTML/CSS/JS by constraint).

@@ -29,6 +29,7 @@ function icon(name, size = 16) {
     home: `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8l6-6 6 6M4 7v6h3v-3h2v3h3V7"/></svg>`,
     globe: `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c-2 2-2 4 0 6s2 4 0 6"/></svg>`,
     logs: `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4h10M3 8h10M3 12h6"/></svg>`,
+    branch: `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="4" cy="3" r="2"/><circle cx="4" cy="13" r="2"/><circle cx="12" cy="5" r="2"/><path d="M4 5v6M12 7c0 3-4 2-8 4"/></svg>`,
   };
   return icons[name] || '';
 }
@@ -266,6 +267,7 @@ function setupDelegation() {
     stopApp: el => stopApp(el.dataset.id),
     toggleFavorite: el => toggleFavorite(el.dataset.id),
     openAppFolder: el => openAppFolder(el.dataset.id),
+    addBranch: el => addBranch(el.dataset.id),
     editApp: el => editApp(el.dataset.id),
     deleteApp: el => deleteApp(el.dataset.id),
     removeScanPath: el => removeScanPath(el.dataset.path),
@@ -838,12 +840,23 @@ function renderApps() {
     return;
   }
 
-  const favorites = _sortApps(_filterApps(state.apps.filter(app => app.isFavorite)));
+  // Branch awareness: apps with a parentId that points at a real app are
+  // rendered nested under that parent, not as top-level rows. Build the
+  // parent->children map and the top-level list once.
+  const appIds = new Set(state.apps.map(a => a.id));
+  const isChild = (a) => a.parentId && appIds.has(a.parentId);
+  const childrenByParent = {};
+  for (const a of state.apps) {
+    if (isChild(a)) (childrenByParent[a.parentId] = childrenByParent[a.parentId] || []).push(a);
+  }
+  const topLevel = state.apps.filter(a => !isChild(a));
+
+  const favorites = _sortApps(_filterApps(topLevel.filter(app => app.isFavorite)));
   const groupedApps = {};
   const ungroupedApps = [];
   const validGroupIds = new Set(state.groups.map(g => g.id));
 
-  for (const app of _sortApps(_filterApps(state.apps.filter(a => !a.isFavorite)))) {
+  for (const app of _sortApps(_filterApps(topLevel.filter(a => !a.isFavorite)))) {
     if (app.group && validGroupIds.has(app.group)) {
       if (!groupedApps[app.group]) groupedApps[app.group] = [];
       groupedApps[app.group].push(app);
@@ -870,7 +883,7 @@ function renderApps() {
           <span class="section-count">${favorites.length}</span>
         </div>
         <div class="section-apps ${state.favoritesExpanded ? '' : 'collapsed'}">
-          ${favorites.map(app => renderAppCard(app)).join('')}
+          ${favorites.map(app => renderAppTree(app, childrenByParent)).join('')}
         </div>
       </div>
     `;
@@ -895,7 +908,7 @@ function renderApps() {
         </div>
         <div class="section-apps ${isExpanded ? '' : 'collapsed'}">
           ${apps.length > 0
-            ? apps.map(app => renderAppCard(app)).join('')
+            ? apps.map(app => renderAppTree(app, childrenByParent)).join('')
             : '<div class="group-empty">No apps in this group</div>'}
         </div>
       </div>
@@ -912,7 +925,7 @@ function renderApps() {
           <span class="section-count">${ungroupedApps.length}</span>
         </div>
         <div class="section-apps ${state.otherProjectsExpanded ? '' : 'collapsed'}">
-          ${ungroupedApps.map(app => renderAppCard(app)).join('')}
+          ${ungroupedApps.map(app => renderAppTree(app, childrenByParent)).join('')}
         </div>
       </div>
     `;
@@ -922,7 +935,18 @@ function renderApps() {
   updateGroupSelects();
 }
 
-function renderAppCard(app) {
+// Render a top-level app plus any branch/worktree children nested beneath it.
+function renderAppTree(app, childrenByParent) {
+  const kids = _sortApps(_filterApps(childrenByParent[app.id] || []));
+  if (!kids.length) return renderAppCard(app, 0);
+  return `<div class="app-tree">
+    ${renderAppCard(app, kids.length)}
+    <div class="app-branches">${kids.map(k => renderAppCard(k)).join('')}</div>
+  </div>`;
+}
+
+function renderAppCard(app, branchCount = 0) {
+  const isBranch = !!app.parentId;
   const managedRunning = state.runningApps.find(r => r.id === app.id && r.running);
   const detected = state.detectedApps[app.id];
   const isRunning = managedRunning || detected;
@@ -1002,8 +1026,9 @@ function renderAppCard(app) {
   }
 
   return `
-    <div class="app-card ${isSelected ? 'selected' : ''} ${isExpanded ? 'expanded' : ''}"
+    <div class="app-card ${isSelected ? 'selected' : ''} ${isExpanded ? 'expanded' : ''} ${isBranch ? 'is-branch' : ''}"
          data-id="${app.id}"
+         ${isBranch ? `style="--branch-color:${app.color}"` : ''}
          draggable="true"
          tabindex="0"
          role="button"
@@ -1025,6 +1050,8 @@ function renderAppCard(app) {
           ${app.isFavorite ? icon('star', 14) : icon('star-outline', 14)}
         </button>
         <span class="app-name-text">${escapeHtml(app.name)}</span>
+        ${app.branch ? `<span class="branch-chip" style="--branch-color:${app.color}" title="Branch / worktree">${icon('branch', 11)}${escapeHtml(app.branch)}</span>` : ''}
+        ${branchCount > 0 ? `<span class="branch-count" title="${branchCount} branch${branchCount !== 1 ? 'es' : ''}">${icon('branch', 10)}${branchCount}</span>` : ''}
         ${portHtml}
         ${countdownHtml}
         ${statsHtml}
@@ -1035,12 +1062,14 @@ function renderAppCard(app) {
         ${actionsHtml}
       </div>
       <div class="app-actions">
+        ${!isBranch ? `<button class="btn btn-small btn-secondary" data-act="addBranch" data-id="${app.id}" title="Add a branch / worktree">${icon('branch', 12)}</button>` : ''}
         <button class="btn btn-small btn-secondary" data-act="openAppFolder" data-id="${app.id}" title="Open folder">${icon('folder', 12)}</button>
         <button class="btn btn-small btn-secondary" data-act="editApp" data-id="${app.id}" title="Edit">${icon('edit', 12)}</button>
         <button class="btn btn-small btn-secondary" data-act="deleteApp" data-id="${app.id}" title="Delete">${icon('trash', 12)}</button>
       </div>
       <div class="app-expanded-details">
         <div class="app-detail-row"><span class="app-detail-label">CMD</span><span class="app-detail-value">${escapeHtml(app.command)}</span></div>
+        ${app.branch ? `<div class="app-detail-row"><span class="app-detail-label">Branch</span><span class="app-detail-value">${escapeHtml(app.branch)}</span></div>` : ''}
         ${app.cwd ? `<div class="app-detail-row"><span class="app-detail-label">CWD</span><span class="app-detail-value">${escapeHtml(app.cwd)}</span></div>` : ''}
         ${app.preferredPort ? `<div class="app-detail-row"><span class="app-detail-label">Port</span><span class="app-detail-value">${app.preferredPort}${app.fallbackRange ? ` (fallback: ${app.fallbackRange[0]}-${app.fallbackRange[1]})` : ''}</span></div>` : ''}
         ${app.description ? `<div class="app-detail-row"><span class="app-detail-label">Info</span><span class="app-detail-value">${escapeHtml(app.description)}</span></div>` : ''}
@@ -1771,16 +1800,33 @@ function selectGroupColor(color) {
 }
 
 // ============ Modal ============
-function openAppModal(app = null) {
-  document.getElementById('modal-title').textContent = app ? 'Edit App' : 'Add App';
+function openAppModal(app = null, opts = {}) {
+  const branchOf = opts.branchOf || null;        // parent app when adding a branch
+  const isBranchEdit = !!app?.parentId;          // editing an existing branch
+  const branchMode = !!branchOf || isBranchEdit; // show the Branch field
+
+  document.getElementById('modal-title').textContent =
+    app ? (isBranchEdit ? 'Edit Branch' : 'Edit App') : (branchOf ? 'Add Branch' : 'Add App');
   document.getElementById('app-id').value = app?.id || '';
-  document.getElementById('app-name').value = app?.name || '';
-  document.getElementById('app-command').value = app?.command || '';
+  // Parent linkage: an edit keeps the app's own parent; adding a branch links to branchOf.
+  document.getElementById('app-parent-id').value = app?.parentId || branchOf?.id || '';
+  document.getElementById('app-branch').value = app?.branch || '';
+
+  // Adding a branch seeds the command from the parent (same `npm run dev`), but
+  // leaves cwd/port blank so the user points it at the worktree folder - the
+  // distinct cwd is what lets PortPilot detect it separately from the parent.
+  // Browse & Auto-detect fills the rest from the chosen worktree directory.
+  document.getElementById('app-name').value = app?.name || (branchOf ? branchOf.name : '');
+  document.getElementById('app-command').value = app?.command || branchOf?.command || '';
   document.getElementById('app-cwd').value = app?.cwd || '';
   document.getElementById('app-port').value = app?.preferredPort || '';
-  document.getElementById('app-fallback').value = app?.fallbackRange ?
-    `${app.fallbackRange[0]}-${app.fallbackRange[1]}` : '';
+  document.getElementById('app-fallback').value = app?.fallbackRange
+    ? `${app.fallbackRange[0]}-${app.fallbackRange[1]}`
+    : (branchOf?.fallbackRange ? `${branchOf.fallbackRange[0]}-${branchOf.fallbackRange[1]}` : '');
   document.getElementById('app-autostart').checked = app?.autoStart || false;
+
+  const branchGroup = document.getElementById('app-branch-group');
+  if (branchGroup) branchGroup.classList.toggle('hidden', !branchMode);
 
   const groupSelect = document.getElementById('app-group');
   groupSelect.innerHTML = '<option value="">Other Projects (no group)</option>';
@@ -1793,7 +1839,15 @@ function openAppModal(app = null) {
   }
 
   dom.modal.classList.remove('hidden');
-  document.getElementById('app-name').focus();
+  document.getElementById(branchMode ? 'app-branch' : 'app-name').focus();
+}
+
+// Open the Add App modal in branch mode, linked to the given parent project.
+function addBranch(parentId) {
+  const parent = state.apps.find(a => a.id === parentId);
+  if (!parent) return;
+  openAppModal(null, { branchOf: parent });
+  showToast('Point the working directory at the branch/worktree folder', 'info');
 }
 
 function closeModal() {
@@ -1892,7 +1946,9 @@ async function handleAppSubmit(e) {
     preferredPort: parseInt(document.getElementById('app-port').value) || null,
     fallbackRange,
     autoStart: document.getElementById('app-autostart').checked,
-    group: document.getElementById('app-group').value || null
+    group: document.getElementById('app-group').value || null,
+    parentId: document.getElementById('app-parent-id').value || null,
+    branch: document.getElementById('app-branch').value.trim() || null
   };
 
   const result = await window.portpilot.config.saveApp(appConfig);

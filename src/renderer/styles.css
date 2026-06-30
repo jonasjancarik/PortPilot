@@ -957,6 +957,57 @@ body {
   background: rgba(122, 162, 247, 0.08);
 }
 
+/* ---- Branch / worktree awareness (Wave 3) ---- */
+/* A parent project and its branch children render as one visual unit. */
+.app-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Children indent under the parent, tied together by a colour rail in the
+   branch's own colour (synced from the VS Code / Peacock window in a later
+   slice; the per-app colour for now). */
+.app-branches {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-left: 18px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border-color);
+}
+
+.app-card.is-branch {
+  border-left: 3px solid var(--branch-color, var(--accent-purple));
+}
+
+/* Branch label chip on a child row, in its own colour. */
+.branch-chip,
+.branch-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.branch-chip {
+  color: var(--branch-color, var(--accent-purple));
+  background: color-mix(in srgb, var(--branch-color, var(--accent-purple)) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--branch-color, var(--accent-purple)) 40%, transparent);
+}
+
+/* Count hint on a parent that owns branches. */
+.branch-count {
+  color: var(--text-secondary, var(--accent-cyan));
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+}
+
 .app-card.dragging {
   opacity: 0.4;
 }

@@ -190,9 +190,14 @@
         </div>
         <form id="app-form">
           <input type="hidden" id="app-id">
+          <input type="hidden" id="app-parent-id">
           <div class="form-group">
             <label for="app-name">App Name</label>
             <input type="text" id="app-name" required placeholder="e.g., AzurePrep Frontend">
+          </div>
+          <div class="form-group hidden" id="app-branch-group">
+            <label for="app-branch">Branch / Worktree</label>
+            <input type="text" id="app-branch" placeholder="e.g., feat/wave2">
           </div>
           <div class="form-group">
             <label for="app-command">Command</label>
