@@ -53,7 +53,7 @@ const state = {
   deleteAppId: null,
   selectedApps: new Set(),
   selectedProjects: new Set(),
-  expandedApps: new Set(),
+  drawerAppId: null,
   expandedPorts: new Map(),
   portsCollapsed: false,
   portGroupExpanded: { dev: true, other: true, system: false },
@@ -279,7 +279,8 @@ function setupDelegation() {
     deleteSelected: () => deleteSelected(),
     clearSelection: () => clearSelection(),
     closeGroupModal: () => closeGroupModal(),
-    saveGroupModal: () => saveGroupModal()
+    saveGroupModal: () => saveGroupModal(),
+    closeAppDrawer: () => closeAppDrawer()
   };
   const CHANGE = {
     toggleAppSelection: el => toggleAppSelection(el.dataset.id),
@@ -296,7 +297,7 @@ function setupDelegation() {
     // Card expand: click anywhere on a card except an interactive control.
     const card = e.target.closest('.app-card');
     if (card && !e.target.closest('button, input, a, [data-act], .btn-star, .req-badge, .drag-handle')) {
-      toggleAppExpansion(card.dataset.id);
+      openAppDrawer(card.dataset.id);
     }
   });
 
@@ -351,8 +352,6 @@ function setupEventListeners() {
   });
 
   // Toolbar buttons
-  document.getElementById('btn-expand-all').addEventListener('click', expandAllApps);
-  document.getElementById('btn-collapse-all').addEventListener('click', collapseAllApps);
   document.getElementById('btn-new-group').addEventListener('click', openNewGroupModal);
 
   // Ports section toggle
@@ -471,6 +470,7 @@ function setupEventListeners() {
       closeGroupModal();
       closeDeleteConfirm();
       closeSettings();
+      closeAppDrawer();
       document.getElementById('modal-discoveries').classList.add('hidden');
     }
   });
@@ -1007,7 +1007,7 @@ function renderAppCard(app, branchCount = 0) {
   if (reqs.remote) badges.push(`<span class="req-badge" title="Remote">${icon('globe', 10)}</span>`);
 
   const isSelected = state.selectedApps.has(app.id);
-  const isExpanded = state.expandedApps.has(app.id);
+  const isActive = state.drawerAppId === app.id;
 
   // Action buttons
   let actionsHtml = '';
@@ -1026,14 +1026,14 @@ function renderAppCard(app, branchCount = 0) {
   }
 
   return `
-    <div class="app-card ${isSelected ? 'selected' : ''} ${isExpanded ? 'expanded' : ''} ${isBranch ? 'is-branch' : ''}"
+    <div class="app-card ${isSelected ? 'selected' : ''} ${isActive ? 'drawer-open' : ''} ${isBranch ? 'is-branch' : ''}"
          data-id="${app.id}"
          ${isBranch ? `style="--branch-color:${app.color}"` : ''}
          draggable="true"
          tabindex="0"
          role="button"
-         aria-expanded="${isExpanded}"
-         aria-label="${escapeHtml(app.name)} — press Enter to ${isExpanded ? 'collapse' : 'expand'} details"
+         aria-haspopup="dialog"
+         aria-label="${escapeHtml(app.name)} — press Enter to open details"
          >
       <span class="drag-handle" title="Drag to reorder" aria-hidden="true">${icon('grip', 14)}</span>
       <input type="checkbox" class="app-checkbox"
@@ -1066,13 +1066,6 @@ function renderAppCard(app, branchCount = 0) {
         <button class="btn btn-small btn-secondary" data-act="openAppFolder" data-id="${app.id}" title="Open folder">${icon('folder', 12)}</button>
         <button class="btn btn-small btn-secondary" data-act="editApp" data-id="${app.id}" title="Edit">${icon('edit', 12)}</button>
         <button class="btn btn-small btn-secondary" data-act="deleteApp" data-id="${app.id}" title="Delete">${icon('trash', 12)}</button>
-      </div>
-      <div class="app-expanded-details">
-        <div class="app-detail-row"><span class="app-detail-label">CMD</span><span class="app-detail-value">${escapeHtml(app.command)}</span></div>
-        ${app.branch ? `<div class="app-detail-row"><span class="app-detail-label">Branch</span><span class="app-detail-value">${escapeHtml(app.branch)}</span></div>` : ''}
-        ${app.cwd ? `<div class="app-detail-row"><span class="app-detail-label">CWD</span><span class="app-detail-value">${escapeHtml(app.cwd)}</span></div>` : ''}
-        ${app.preferredPort ? `<div class="app-detail-row"><span class="app-detail-label">Port</span><span class="app-detail-value">${app.preferredPort}${app.fallbackRange ? ` (fallback: ${app.fallbackRange[0]}-${app.fallbackRange[1]})` : ''}</span></div>` : ''}
-        ${app.description ? `<div class="app-detail-row"><span class="app-detail-label">Info</span><span class="app-detail-value">${escapeHtml(app.description)}</span></div>` : ''}
       </div>
     </div>
   `;
@@ -1359,12 +1352,86 @@ function updateGroupSelects() {
 }
 
 // ============ App Card Expansion ============
-function toggleAppExpansion(appId) {
-  if (state.expandedApps.has(appId)) {
-    state.expandedApps.delete(appId);
+function fmtUptime(sec) {
+  if (!sec) return null;
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+// Slide-over detail drawer: opens on row click, shows the full untruncated
+// command/cwd plus live stats and safe actions (Start XOR Stop, never both).
+function openAppDrawer(appId) {
+  const app = state.apps.find(a => a.id === appId);
+  if (!app) return;
+  state.drawerAppId = appId;
+
+  const managedRunning = state.runningApps.find(r => r.id === app.id && r.running);
+  const detected = state.detectedApps[app.id];
+  const isRunning = !!(managedRunning || detected);
+  const starting = state.startingApps[app.id];
+  const conflict = state.unknownConflicts.find(c => c.appId === app.id);
+  const port = detected?.port ?? app.preferredPort;
+  const details = detected ? state.expandedPorts.get(detected.port) : null;
+
+  let statusClass = 'stopped', statusWord = 'Stopped';
+  if (starting) { statusClass = 'starting'; statusWord = 'Starting'; }
+  else if (isRunning) { statusClass = 'running'; statusWord = 'Running'; }
+  else if (conflict) { statusClass = 'conflict'; statusWord = 'Port blocked'; }
+
+  document.getElementById('app-drawer-status').className = `status-dot ${statusClass}`;
+  document.getElementById('app-drawer-title').textContent = app.name;
+
+  const field = (label, value, mono) => value
+    ? `<div class="drawer-field"><span class="drawer-field-label">${label}</span><span class="drawer-field-value${mono ? ' mono' : ''}">${escapeHtml(String(value))}</span></div>`
+    : '';
+
+  const fields = [
+    field('Status', statusWord + (managedRunning && detected?.pid ? ` · PID ${detected.pid}` : '')),
+    field('Branch', app.branch),
+    port ? field('Port', `:${port}${app.fallbackRange ? `  (fallback ${app.fallbackRange[0]}-${app.fallbackRange[1]})` : ''}`, true) : '',
+    field('Memory', details?.memory ? details.memory + ' MB' : ''),
+    field('Uptime', fmtUptime(details?.uptime)),
+    field('Command', app.command, true),
+    field('Directory', app.cwd, true),
+    field('Info', app.description),
+  ].filter(Boolean).join('');
+
+  // Primary action: Start XOR Stop (never both).
+  let primary;
+  if (conflict) {
+    primary = `<button class="btn btn-warning" data-act="killConflictingProcess" data-id="${app.id}">${icon('kill', 12)} Kill blocker</button>
+               <button class="btn btn-success" data-act="startApp" data-id="${app.id}">${icon('play', 12)} Start</button>`;
+  } else if (isRunning || starting) {
+    primary = `<button class="btn btn-danger" data-act="stopApp" data-id="${app.id}" ${starting ? 'disabled' : ''}>${icon('stop', 12)} Stop</button>`;
   } else {
-    state.expandedApps.add(appId);
+    primary = `<button class="btn btn-success" data-act="startApp" data-id="${app.id}">${icon('play', 12)} Start</button>`;
   }
+
+  const secondary = [
+    port ? `<button class="btn btn-secondary" data-act="openInBrowser" data-id="${app.id}">${icon('browser', 12)} Open</button>` : '',
+    managedRunning ? `<button class="btn btn-secondary" data-act="viewLogs" data-id="${app.id}">${icon('logs', 12)} Logs</button>` : '',
+    app.cwd ? `<button class="btn btn-secondary" data-act="openAppFolder" data-id="${app.id}">${icon('folder', 12)} Folder</button>` : '',
+    `<button class="btn btn-secondary" data-act="copyCmdPath" data-cmd="${escapeHtml(app.command)}">${icon('copy', 12)} Copy cmd</button>`,
+    !app.parentId ? `<button class="btn btn-secondary" data-act="addBranch" data-id="${app.id}">${icon('branch', 12)} Add branch</button>` : '',
+    `<button class="btn btn-secondary" data-act="editApp" data-id="${app.id}">${icon('edit', 12)} Edit</button>`,
+    `<button class="btn btn-secondary" data-act="deleteApp" data-id="${app.id}">${icon('trash', 12)} Delete</button>`,
+  ].filter(Boolean).join('');
+
+  document.getElementById('app-drawer-body').innerHTML = `
+    <div class="drawer-actions-primary">${primary}</div>
+    <div class="drawer-fields">${fields}</div>
+    <div class="drawer-actions">${secondary}</div>`;
+
+  document.getElementById('app-drawer-backdrop').classList.remove('hidden');
+  document.getElementById('app-drawer').classList.remove('hidden');
+  renderApps(); // re-render to mark the active row
+}
+
+function closeAppDrawer() {
+  state.drawerAppId = null;
+  document.getElementById('app-drawer-backdrop').classList.add('hidden');
+  document.getElementById('app-drawer').classList.add('hidden');
   renderApps();
 }
 
@@ -1374,18 +1441,8 @@ function handleCardKeydown(event, appId) {
   if (event.target !== event.currentTarget) return;
   if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
     event.preventDefault();
-    toggleAppExpansion(appId);
+    openAppDrawer(appId);
   }
-}
-
-function expandAllApps() {
-  state.apps.forEach(app => state.expandedApps.add(app.id));
-  renderApps();
-}
-
-function collapseAllApps() {
-  state.expandedApps.clear();
-  renderApps();
 }
 
 // ============ Drag and Drop ============
@@ -2218,9 +2275,8 @@ window.closeGroupModal = closeGroupModal;
 window.saveGroupModal = saveGroupModal;
 window.confirmDeleteGroup = confirmDeleteGroup;
 window.moveSelectedToGroup = moveSelectedToGroup;
-window.expandAllApps = expandAllApps;
-window.collapseAllApps = collapseAllApps;
-window.toggleAppExpansion = toggleAppExpansion;
+window.openAppDrawer = openAppDrawer;
+window.closeAppDrawer = closeAppDrawer;
 window.handleCardKeydown = handleCardKeydown;
 window.toggleGroup = toggleGroup;
 window.handleDragStart = handleDragStart;
