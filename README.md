@@ -599,6 +599,7 @@ Just ask in natural language:
 | `bulk_start` | Start multiple apps at once |
 | `bulk_stop` | Stop multiple apps at once |
 | `add_app` | Register a new app |
+| `add_worktree` | Register a git worktree/branch nested under its parent project (auto-detects branch + parent from git) |
 | `update_app` | Update app configuration |
 | `delete_app` | Remove an app |
 | `list_running` | Show currently running apps |

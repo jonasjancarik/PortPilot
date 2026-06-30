@@ -111,10 +111,16 @@ Data model (all optional, backward-compatible additions to the app record):
 | 8 | Hierarchy + manual branch | desktop (core/config/renderer) | `parentId`/`branch` persisted in config; children render indented under parent with a branch chip coloured by app colour, excluded from top-level lists; "+ branch" action on a parent opens the Add App modal pre-filled (parent's command/cwd, parentId set, branch field). Matching already distinguishes them. Shippable proof: two branches of one repo run side-by-side. | M | **in progress** (2026-06-30) |
 | 9 | Worktree auto-detect | desktop + main | `git worktree list --porcelain` from a registered app's cwd enumerates worktrees + branches; primary worktree = parent; an "Add worktrees" action lists unregistered ones. New IPC handler. | M | later |
 | 10 | Peacock colour sync | desktop + main | Read `<worktree>/.vscode/settings.json` -> `peacock.color` (fallback `workbench.colorCustomizations`); use as row accent so PortPilot row == the VS Code window colour. `colorSource:'peacock'`. | S | later |
-| 11 | MCP `add_worktree` + skill | mcp + skill | Extend MCP so Claude registers the current worktree under its parent on a given port (resolving git + Peacock). Wire the `/new-worktree` skill to call it on mint - kills the manual "load in localhost" prompting. | M | later |
+| 11 | MCP `add_worktree` + skill | mcp + skill | Extend MCP so Claude registers the current worktree under its parent on a given port (resolving git + Peacock). Wire the `/new-worktree` skill to call it on mint - kills the manual "load in localhost" prompting. | M | **MCP tool done** (2026-06-30); skill wiring pending |
 | 12 | Stale pruning | desktop + main | On scan, if a child's `worktreePath` is gone from `git worktree list`, badge "stale (worktree removed)" + one-click remove. Ties into the existing `wt-cleanup` hook. | S | later |
 
 Wave 3 gate: Slice 8 ships and proves the model before scoping 9-12. Slices 9-12 are independent enough to parallelise once 8 lands.
+
+#### Slice 8 landed (2026-06-30)
+Hierarchy + manual branch on the desktop renderer. Children nest under the parent in an `.app-tree`, excluded from top-level lists, with a colour-railed branch chip and a parent "N branches" count; "+ branch" opens the Add App modal in branch mode pre-linked to the parent. Verified via `tests/visual-branches.js` (real Electron, seeded parent+2 branches). The web portal serves the renderer verbatim, so it inherits this. Slice 7 (web parity) is therefore largely covered for this feature.
+
+#### Slice 11 landed (2026-06-30) - MCP tool
+`add_worktree` MCP tool (19 tools total): takes a worktree path, auto-detects the branch via `git rev-parse` and the parent via the repo's primary worktree (`git worktree list --porcelain`, realpath-canonicalised for Windows 8.3 paths), and upserts a child app linked to the matched parent. Pure logic (`resolveWorktreeGit` / `registerWorktree`) extracted and unit-tested in `tests/mcp-worktree.test.mjs` (13 cases incl. a real linked-worktree integration). `main()` is now guarded so the module is importable for tests. **Pending:** wiring the `/new-worktree` skill (in `~/.claude/skills`, outside this repo) to call the tool on mint, and Peacock colour at registration (Slice 10).
 
 ## What this plan does NOT cover
 
