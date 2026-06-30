@@ -6,13 +6,13 @@
 
 **[MCP Integration Setup](mcp-server/README.md)**
 
-[![Version](https://img.shields.io/badge/version-3.1.0-blue.svg)](https://github.com/m4cd4r4/PortPilot/releases/tag/v3.1.0)
+[![Version](https://img.shields.io/badge/version-3.2.0-blue.svg)](https://github.com/m4cd4r4/PortPilot/releases/tag/v3.2.0)
 [![Tests](https://img.shields.io/badge/tests-Playwright%20E2E-blue.svg)](tests/)
 [![Licence](https://img.shields.io/badge/licence-MIT-green.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-enabled-purple.svg)](mcp-server/README.md)
 [![VS Code Marketplace](https://vsmarketplacebadges.dev/version-short/macdara.portpilot.svg)](https://marketplace.visualstudio.com/items?itemName=macdara.portpilot)
 
-![PortPilot](docs/ui-redesign/wave3-hero-web.png)
+![PortPilot](docs/screenshots/slot1.png)
 
 ---
 
@@ -58,7 +58,7 @@ Control PortPilot with natural language! Works with Claude Code, Cursor, Windsur
 
 Run several git branches or worktrees of the same project at once - each on its own port, nested under the parent project and colour-coded to match its VS Code (Peacock) window. No more hand-launching a branch's dev server because it runs on a different port than the configured one.
 
-![PortPilot branch and worktree awareness](docs/ui-redesign/wave3-hero-web.png)
+![PortPilot branch and worktree awareness](docs/screenshots/slot1.png)
 
 - **Nested branches** - a worktree/branch shows indented under its main project with a colour rail, branch chip, and a per-parent count, so multiple branches of one repo are visible and runnable simultaneously.
 - **Add worktrees** - point PortPilot at a project and it detects the repo's git worktrees (`git worktree list`) and bulk-adds the unregistered ones, reading each one's Peacock colour from `.vscode/settings.json`.
@@ -170,7 +170,9 @@ The extension's tree views adopt the shared model: branches nest under their pro
 - **Single-Instance Lock** - Only one PortPilot runs at a time, focuses existing window
 - **Multi-Theme Support** - 6 themes including TokyoNight, Brutalist Dark, Nord, Dracula, Glass
 - **VS Code Extension** - Status bar counter, collapsible groups, full CRUD from the sidebar
-- **MCP v2.0 with 18 tools** - Manage your entire dev environment via any MCP-compatible AI assistant
+- **Branch & worktree awareness** - run multiple git branches of one project at once, nested and colour-coded; detect a repo's worktrees and bulk-add them; stale entries flagged for removal
+- **Detail drawer** - slide-over with full command, cwd, PID, uptime, branch and safe Start/Stop/Open/Copy/Remove actions
+- **MCP with 19 tools** - Manage your entire dev environment (including `add_worktree`) via any MCP-compatible AI assistant
 
 ## Auto Detection
 
@@ -363,21 +365,21 @@ If multiple detectors match, the highest-priority one wins.
 
 Explore all PortPilot features including app management, the Active Ports scanner, Settings panel, multiple themes, and more.
 
-![PortPilot Features](docs/ui-redesign/wave3-hero-web.png)
+![PortPilot Features](docs/screenshots/slot1.png)
 
 ## Installation
 
 ### Download (Recommended)
 
-**Latest Release: v3.1.0**
+**Latest Release: v3.2.0**
 
 **Windows:**
-- [PortPilot-3.1.0-x64.exe](https://github.com/m4cd4r4/PortPilot/releases/download/v3.1.0/PortPilot-3.1.0-x64.exe) - NSIS Installer (~72 MB)
-- [PortPilot-3.1.0-portable.exe](https://github.com/m4cd4r4/PortPilot/releases/download/v3.1.0/PortPilot-3.1.0-portable.exe) - Portable (~72 MB)
+- [PortPilot-3.2.0-x64.exe](https://github.com/m4cd4r4/PortPilot/releases/download/v3.2.0/PortPilot-3.2.0-x64.exe) - NSIS Installer (~75 MB)
+- [PortPilot-3.2.0-portable.exe](https://github.com/m4cd4r4/PortPilot/releases/download/v3.2.0/PortPilot-3.2.0-portable.exe) - Portable (~75 MB)
 
 **Linux:**
-- [PortPilot-3.1.0-x86_64.AppImage](https://github.com/m4cd4r4/PortPilot/releases/download/v3.1.0/PortPilot-3.1.0-x86_64.AppImage) - AppImage (~98 MB)
-- [PortPilot-3.1.0-amd64.deb](https://github.com/m4cd4r4/PortPilot/releases/download/v3.1.0/PortPilot-3.1.0-amd64.deb) - Debian/Ubuntu (~69 MB)
+- [PortPilot-3.2.0-x86_64.AppImage](https://github.com/m4cd4r4/PortPilot/releases/download/v3.2.0/PortPilot-3.2.0-x86_64.AppImage) - AppImage (~98 MB)
+- [PortPilot-3.2.0-amd64.deb](https://github.com/m4cd4r4/PortPilot/releases/download/v3.2.0/PortPilot-3.2.0-amd64.deb) - Debian/Ubuntu (~69 MB)
 
 **macOS:**
 - Build from source (see below) - macOS is supported but not officially tested
@@ -674,7 +676,14 @@ started processes separately).
 
 ## Version History
 
-### v3.1.0 (2026-06-08) - Current Release
+### v3.2.0 (2026-07-01) - Current Release
+- Branch & worktree awareness - run multiple git branches of one project at once, each on its own port, nested under the parent and colour-coded to match its VS Code (Peacock) window
+- "Add worktrees" auto-detects a repo's git worktrees and bulk-adds them; `add_worktree` MCP tool + CLI register a worktree under its parent (19 MCP tools total)
+- Detail drawer on row click (command, cwd, PID, uptime, branch; Start/Stop/Open/Copy/Remove); denser rows with hover-revealed actions; ports and requirements as chips
+- Stale-worktree pruning - a branch whose folder is gone is flagged and one-click removable
+- VS Code extension parity - branches nest in the tree; Active Ports grouped Dev/Other/System with kill gated off system ports
+
+### v3.1.0 (2026-06-08)
 - Web portal hosted from VS Code - the extension runs the browser UI itself (opt-in `portpilot.webPortal.enabled`), no desktop app needed
 - Spawns the hardened loopback agent with the editor's own Node; "PP Portal" status-bar item; graceful IPC shutdown (works on Windows); self-exits if the editor host closes
 - Opt-in `portpilot.webPortal.stopAppsOnStop` to also stop the dev servers the portal started
