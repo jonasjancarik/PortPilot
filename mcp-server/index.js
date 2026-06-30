@@ -151,8 +151,10 @@ function registerWorktree(config, input, git, now) {
     parentId: parentApp?.id || null,
     branch: resolvedBranch,
     worktreePath: wtPath,
-    colorSource: existing?.colorSource ?? null,
-    color: existing?.color || pickColor(resolvedBranch || wtPath),
+    // An explicit colour (e.g. the VS Code window's Peacock colour, passed by
+    // wt-mint) wins and is tagged so a later manual change can be respected.
+    colorSource: input.colorSource ?? existing?.colorSource ?? null,
+    color: input.color || existing?.color || pickColor(resolvedBranch || wtPath),
     createdAt: existing?.createdAt || now,
     updatedAt: now,
   };
@@ -944,8 +946,47 @@ async function startHttp(port, host) {
   });
 }
 
+// Minimal --flag value parser for the register-worktree CLI.
+function parseFlags(args) {
+  const out = {};
+  for (let i = 0; i < args.length; i++) {
+    if (!args[i].startsWith('--')) continue;
+    const key = args[i].slice(2);
+    const next = args[i + 1];
+    out[key] = (next && !next.startsWith('--')) ? args[++i] : 'true';
+  }
+  return out;
+}
+
+// `node index.js register-worktree --path <dir> [--branch] [--port] [--color]
+// [--parent] [--name] [--command]` - lets wt-mint.sh (and any script) register a
+// worktree in PortPilot without an MCP round-trip. Reuses the same tested logic
+// as the add_worktree tool and writes the shared config the desktop app watches.
+function runRegisterWorktreeCli(args) {
+  const f = parseFlags(args);
+  if (!f.path) { console.error('register-worktree: --path is required'); process.exit(64); }
+  if (!fs.existsSync(f.path)) { console.error(`register-worktree: path does not exist: ${f.path}`); process.exit(66); }
+  const config = readConfig();
+  const git = resolveWorktreeGit(f.path);
+  const result = registerWorktree(config, {
+    path: f.path,
+    branch: f.branch,
+    parent: f.parent,
+    name: f.name,
+    command: f.command,
+    preferredPort: f.port ? parseInt(f.port, 10) : undefined,
+    color: f.color,
+    colorSource: f.color ? 'peacock' : undefined,
+  }, git, new Date().toISOString());
+  if (!result.ok) { console.error(result.error); process.exit(1); }
+  writeConfig(config);
+  console.log(JSON.stringify(result, null, 2));
+  process.exit(0);
+}
+
 async function main() {
   const args = process.argv.slice(2);
+  if (args[0] === 'register-worktree') return runRegisterWorktreeCli(args.slice(1));
   const portIdx = args.indexOf('--port');
   const portArg = portIdx !== -1 ? args[portIdx + 1] : process.env.PORTPILOT_MCP_PORT;
   const port = portArg ? parseInt(portArg, 10) : null;

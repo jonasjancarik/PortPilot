@@ -88,6 +88,13 @@ t('missing git branch -> note and null branch', () => {
   assert.ok(r.notes.some(n => /branch/i.test(n)));
 });
 
+t('explicit colour (e.g. Peacock) is stored with colorSource', () => {
+  const config = { apps: [parentApp()] };
+  const r = registerWorktree(config, { path: 'C:/repo/wt-x', color: '#1857A4', colorSource: 'peacock' }, git(), NOW);
+  assert.equal(r.app.color, '#1857A4');
+  assert.equal(r.app.colorSource, 'peacock');
+});
+
 t('pickColor is deterministic and within the palette', () => {
   const c = pickColor('feat/x');
   assert.equal(c, pickColor('feat/x'));
