@@ -925,31 +925,34 @@ body {
 }
 
 .group-empty {
-  padding: 8px 16px;
+  padding: 3px 14px;
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   font-style: italic;
+  opacity: 0.7;
 }
 
 /* ============ App Card ============ */
 .app-card {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
+  gap: 7px;
+  padding: 2px 8px;
   background: var(--card-bg);
   backdrop-filter: var(--card-blur);
   -webkit-backdrop-filter: var(--card-blur);
   border: var(--border-width) solid var(--card-border);
   border-radius: var(--radius);
   cursor: pointer;
-  transition: all 0.15s ease, transform 0.15s ease;
-  min-height: 34px;
+  transition: background 0.12s ease, border-color 0.12s ease;
+  min-height: 27px;
 }
 
+/* Calmer hover: a faint wash + border tint, no vertical jump (the translate
+   made the dense list feel jittery and chunky). */
 .app-card:hover {
-  border-color: var(--accent-cyan);
-  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent-cyan) 55%, var(--card-border));
+  background: color-mix(in srgb, var(--accent-cyan) 7%, var(--card-bg));
 }
 
 .app-card.selected {
@@ -962,7 +965,7 @@ body {
 .app-tree {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 /* Children indent under the parent, tied together by a colour rail in the
@@ -971,14 +974,14 @@ body {
 .app-branches {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-left: 18px;
+  gap: 2px;
+  margin-left: 15px;
   padding-left: 10px;
-  border-left: 2px solid var(--border-color);
+  border-left: 1px solid var(--border-color);
 }
 
 .app-card.is-branch {
-  border-left: 3px solid var(--branch-color, var(--accent-purple));
+  border-left: 2px solid var(--branch-color, var(--accent-purple));
 }
 
 /* Branch label chip on a child row, in its own colour. */
@@ -987,18 +990,19 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1;
-  padding: 2px 6px;
-  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.4;
+  padding: 1px 6px;
+  border-radius: 9px;
   white-space: nowrap;
 }
 
+/* Quieter branch chip: the colour reads as a tint, not a loud solid pill. */
 .branch-chip {
   color: var(--branch-color, var(--accent-purple));
-  background: color-mix(in srgb, var(--branch-color, var(--accent-purple)) 16%, transparent);
-  border: 1px solid color-mix(in srgb, var(--branch-color, var(--accent-purple)) 40%, transparent);
+  background: color-mix(in srgb, var(--branch-color, var(--accent-purple)) 11%, transparent);
+  border: 1px solid color-mix(in srgb, var(--branch-color, var(--accent-purple)) 28%, transparent);
 }
 
 /* Count hint on a parent that owns branches. */
@@ -1108,21 +1112,26 @@ body {
   text-overflow: ellipsis;
 }
 
+/* Port as a quiet monochrome chip (Tailscale-style) rather than loud bold blue. */
 .app-port-badge {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--accent-cyan);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-secondary);
   font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
   white-space: nowrap;
+  padding: 0 5px;
+  line-height: 1.5;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
 }
 
 .app-ip-version {
-  font-size: 0.58rem;
+  font-size: 0.56rem;
   color: var(--text-muted);
-  background: var(--bg-tertiary);
-  padding: 0 3px;
+  padding: 0 2px;
   border-radius: 2px;
   font-weight: 600;
+  text-transform: uppercase;
 }
 
 /* Favorite star */
@@ -1238,11 +1247,15 @@ body {
 }
 
 .req-badge {
-  font-size: 0.7rem;
-  padding: 1px 3px;
-  border-radius: 2px;
+  font-size: 0.6rem;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  border: 1px solid var(--card-border);
   cursor: default;
-  line-height: 1;
+  line-height: 1.5;
 }
 
 .req-badge.badge-warning {
