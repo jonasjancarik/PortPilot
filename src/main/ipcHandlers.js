@@ -1,8 +1,102 @@
 const { scanPorts, checkPort, findAvailablePort } = require('./portScanner');
 const { startApp, stopApp, killProcess, killByPort, getRunningApps, getAppLogs } = require('./processManager');
 const path = require('path');
-const { exec } = require('child_process');
+const fs = require('fs');
+const { exec, execSync } = require('child_process');
 const os = require('os');
+
+// Read the Peacock window colour from a worktree's .vscode/settings.json so a
+// detected branch can be coloured to match its VS Code window. settings.json is
+// JSONC (may contain // comments), so extract the value with a tolerant regex
+// rather than JSON.parse.
+function readPeacockColor(dir) {
+  try {
+    const raw = fs.readFileSync(path.join(dir, '.vscode', 'settings.json'), 'utf8');
+    const m = raw.match(/"peacock\.color"\s*:\s*"(#[0-9a-fA-F]{3,8})"/);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+// Parse `git worktree list --porcelain` into { path, branch, isMain } entries.
+// The first entry is always the primary worktree.
+function parseWorktrees(porcelain) {
+  const out = [];
+  let cur = null;
+  for (const line of porcelain.split('\n')) {
+    if (line.startsWith('worktree ')) {
+      if (cur) out.push(cur);
+      cur = { path: line.slice('worktree '.length).trim(), branch: null, isMain: out.length === 0 };
+    } else if (line.startsWith('branch ') && cur) {
+      cur.branch = line.slice('branch '.length).trim().replace(/^refs\/heads\//, '');
+    } else if (line.startsWith('detached') && cur) {
+      cur.branch = null;
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+// Detect git worktrees of a registered app, for bulk-adding them as nested
+// branches. Runs `git worktree list` in the app's cwd, marks which are already
+// registered (by cwd), and reads each one's Peacock colour. Shared by the
+// Electron IPC handler and the web agent dispatcher.
+function detectWorktrees(configStore, appId) {
+  try {
+    const parent = configStore.getApp(appId);
+    if (!parent || !parent.cwd) return { success: false, error: 'App has no working directory' };
+
+    let porcelain;
+    try {
+      porcelain = execSync('git worktree list --porcelain', {
+        cwd: parent.cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+      });
+    } catch {
+      return { success: false, error: 'Not a git repository (or git not available)' };
+    }
+
+    const norm = (p) => path.normalize(String(p || '')).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+    const registered = new Set(configStore.getApps().map((a) => norm(a.cwd)));
+    const parentCwd = norm(parent.cwd);
+
+    const candidates = parseWorktrees(porcelain)
+      .filter((wt) => norm(wt.path) !== parentCwd) // never offer the parent itself
+      .map((wt) => {
+        const color = readPeacockColor(wt.path);
+        return {
+          path: wt.path,
+          branch: wt.branch,
+          color,
+          colorSource: color ? 'peacock' : null,
+          registered: registered.has(norm(wt.path)),
+        };
+      });
+
+    return { success: true, parent: { id: parent.id, name: parent.name, command: parent.command }, candidates };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+// Find branch/worktree apps whose working directory is gone (worktree removed),
+// so the UI can flag them stale and offer one-click removal. A plain app with a
+// missing cwd is left alone - only worktree-linked entries (parentId or
+// worktreePath) are pruning candidates.
+function detectStaleWorktrees(configStore) {
+  try {
+    const ids = configStore.getApps()
+      .filter((a) => {
+        const isWorktree = !!(a.parentId || a.worktreePath);
+        const dir = a.worktreePath || a.cwd;
+        return isWorktree && dir && !fs.existsSync(dir);
+      })
+      .map((a) => a.id);
+    return { success: true, ids };
+  } catch (error) {
+    return { success: false, error: error.message, ids: [] };
+  }
+}
 
 /**
  * Get detailed process information (memory, uptime, connections)
@@ -439,6 +533,16 @@ function setupIpcHandlers(ipcMain, configStore) {
     }
   });
 
+  /**
+   * Detect git worktrees of a registered app, for bulk-adding them as nested
+   * branches. Runs `git worktree list` in the app's cwd, marks which are already
+   * registered (by cwd), and reads each one's Peacock colour.
+   */
+  ipcMain.handle('worktrees:detect', async (_, appId) => detectWorktrees(configStore, appId));
+
+  /** Return ids of branch/worktree apps whose worktree folder no longer exists. */
+  ipcMain.handle('worktrees:stale', async () => detectStaleWorktrees(configStore));
+
   /** Delete an app config */
   ipcMain.handle('config:deleteApp', async (_, appId) => {
     try {
@@ -812,4 +916,4 @@ function setupIpcHandlers(ipcMain, configStore) {
   });
 }
 
-module.exports = { setupIpcHandlers, matchPortsToApps, getProcessDetails };
+module.exports = { setupIpcHandlers, matchPortsToApps, getProcessDetails, detectWorktrees, detectStaleWorktrees };

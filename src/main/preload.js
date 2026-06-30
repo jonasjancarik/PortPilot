@@ -41,6 +41,12 @@ contextBridge.exposeInMainWorld('portpilot', {
     deleteGroup: (groupId) => ipcRenderer.invoke('config:deleteGroup', groupId)
   },
 
+  // Worktree operations
+  worktrees: {
+    detect: (appId) => ipcRenderer.invoke('worktrees:detect', appId),
+    stale: () => ipcRenderer.invoke('worktrees:stale')
+  },
+
   // Discovery operations
   discovery: {
     scan: (scanPaths) => ipcRenderer.invoke('discovery:scan', scanPaths),

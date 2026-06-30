@@ -29,6 +29,7 @@ function icon(name, size = 16) {
     home: `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8l6-6 6 6M4 7v6h3v-3h2v3h3V7"/></svg>`,
     globe: `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c-2 2-2 4 0 6s2 4 0 6"/></svg>`,
     logs: `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4h10M3 8h10M3 12h6"/></svg>`,
+    branch: `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="4" cy="3" r="2"/><circle cx="4" cy="13" r="2"/><circle cx="12" cy="5" r="2"/><path d="M4 5v6M12 7c0 3-4 2-8 4"/></svg>`,
   };
   return icons[name] || '';
 }
@@ -52,7 +53,8 @@ const state = {
   deleteAppId: null,
   selectedApps: new Set(),
   selectedProjects: new Set(),
-  expandedApps: new Set(),
+  drawerAppId: null,
+  staleApps: new Set(),
   expandedPorts: new Map(),
   portsCollapsed: false,
   portGroupExpanded: { dev: true, other: true, system: false },
@@ -266,6 +268,7 @@ function setupDelegation() {
     stopApp: el => stopApp(el.dataset.id),
     toggleFavorite: el => toggleFavorite(el.dataset.id),
     openAppFolder: el => openAppFolder(el.dataset.id),
+    addBranch: el => addBranch(el.dataset.id),
     editApp: el => editApp(el.dataset.id),
     deleteApp: el => deleteApp(el.dataset.id),
     removeScanPath: el => removeScanPath(el.dataset.path),
@@ -277,7 +280,11 @@ function setupDelegation() {
     deleteSelected: () => deleteSelected(),
     clearSelection: () => clearSelection(),
     closeGroupModal: () => closeGroupModal(),
-    saveGroupModal: () => saveGroupModal()
+    saveGroupModal: () => saveGroupModal(),
+    closeAppDrawer: () => closeAppDrawer(),
+    detectWorktrees: el => detectWorktrees(el.dataset.id),
+    confirmAddWorktrees: () => confirmAddWorktrees(),
+    closeWorktreesModal: () => closeWorktreesModal()
   };
   const CHANGE = {
     toggleAppSelection: el => toggleAppSelection(el.dataset.id),
@@ -294,7 +301,7 @@ function setupDelegation() {
     // Card expand: click anywhere on a card except an interactive control.
     const card = e.target.closest('.app-card');
     if (card && !e.target.closest('button, input, a, [data-act], .btn-star, .req-badge, .drag-handle')) {
-      toggleAppExpansion(card.dataset.id);
+      openAppDrawer(card.dataset.id);
     }
   });
 
@@ -349,8 +356,6 @@ function setupEventListeners() {
   });
 
   // Toolbar buttons
-  document.getElementById('btn-expand-all').addEventListener('click', expandAllApps);
-  document.getElementById('btn-collapse-all').addEventListener('click', collapseAllApps);
   document.getElementById('btn-new-group').addEventListener('click', openNewGroupModal);
 
   // Ports section toggle
@@ -433,6 +438,7 @@ function setupEventListeners() {
         closeModal();
         closeGroupModal();
         closeDeleteConfirm();
+        closeWorktreesModal();
         closeSettings();
         closeLogs();
         document.getElementById('modal-discoveries').classList.add('hidden');
@@ -469,6 +475,8 @@ function setupEventListeners() {
       closeGroupModal();
       closeDeleteConfirm();
       closeSettings();
+      closeAppDrawer();
+      closeWorktreesModal();
       document.getElementById('modal-discoveries').classList.add('hidden');
     }
   });
@@ -736,14 +744,16 @@ async function openInBrowser(appId) {
 // ============ App Operations ============
 async function loadApps() {
   try {
-    const [configResult, groupsResult, runningResult, scanResult] = await Promise.all([
+    const [configResult, groupsResult, runningResult, scanResult, staleResult] = await Promise.all([
       window.portpilot.config.getApps(),
       window.portpilot.config.getGroups(),
       window.portpilot.process.list(),
-      window.portpilot.ports.scanWithApps()
+      window.portpilot.ports.scanWithApps(),
+      window.portpilot.worktrees.stale()
     ]);
 
     if (configResult.success) state.apps = configResult.apps;
+    if (staleResult && staleResult.success) state.staleApps = new Set(staleResult.ids);
     if (groupsResult.success) state.groups = groupsResult.groups;
     if (runningResult.success) state.runningApps = runningResult.apps;
     if (scanResult.success) {
@@ -838,12 +848,23 @@ function renderApps() {
     return;
   }
 
-  const favorites = _sortApps(_filterApps(state.apps.filter(app => app.isFavorite)));
+  // Branch awareness: apps with a parentId that points at a real app are
+  // rendered nested under that parent, not as top-level rows. Build the
+  // parent->children map and the top-level list once.
+  const appIds = new Set(state.apps.map(a => a.id));
+  const isChild = (a) => a.parentId && appIds.has(a.parentId);
+  const childrenByParent = {};
+  for (const a of state.apps) {
+    if (isChild(a)) (childrenByParent[a.parentId] = childrenByParent[a.parentId] || []).push(a);
+  }
+  const topLevel = state.apps.filter(a => !isChild(a));
+
+  const favorites = _sortApps(_filterApps(topLevel.filter(app => app.isFavorite)));
   const groupedApps = {};
   const ungroupedApps = [];
   const validGroupIds = new Set(state.groups.map(g => g.id));
 
-  for (const app of _sortApps(_filterApps(state.apps.filter(a => !a.isFavorite)))) {
+  for (const app of _sortApps(_filterApps(topLevel.filter(a => !a.isFavorite)))) {
     if (app.group && validGroupIds.has(app.group)) {
       if (!groupedApps[app.group]) groupedApps[app.group] = [];
       groupedApps[app.group].push(app);
@@ -870,7 +891,7 @@ function renderApps() {
           <span class="section-count">${favorites.length}</span>
         </div>
         <div class="section-apps ${state.favoritesExpanded ? '' : 'collapsed'}">
-          ${favorites.map(app => renderAppCard(app)).join('')}
+          ${favorites.map(app => renderAppTree(app, childrenByParent)).join('')}
         </div>
       </div>
     `;
@@ -895,7 +916,7 @@ function renderApps() {
         </div>
         <div class="section-apps ${isExpanded ? '' : 'collapsed'}">
           ${apps.length > 0
-            ? apps.map(app => renderAppCard(app)).join('')
+            ? apps.map(app => renderAppTree(app, childrenByParent)).join('')
             : '<div class="group-empty">No apps in this group</div>'}
         </div>
       </div>
@@ -912,7 +933,7 @@ function renderApps() {
           <span class="section-count">${ungroupedApps.length}</span>
         </div>
         <div class="section-apps ${state.otherProjectsExpanded ? '' : 'collapsed'}">
-          ${ungroupedApps.map(app => renderAppCard(app)).join('')}
+          ${ungroupedApps.map(app => renderAppTree(app, childrenByParent)).join('')}
         </div>
       </div>
     `;
@@ -922,7 +943,18 @@ function renderApps() {
   updateGroupSelects();
 }
 
-function renderAppCard(app) {
+// Render a top-level app plus any branch/worktree children nested beneath it.
+function renderAppTree(app, childrenByParent) {
+  const kids = _sortApps(_filterApps(childrenByParent[app.id] || []));
+  if (!kids.length) return renderAppCard(app, 0);
+  return `<div class="app-tree">
+    ${renderAppCard(app, kids.length)}
+    <div class="app-branches">${kids.map(k => renderAppCard(k)).join('')}</div>
+  </div>`;
+}
+
+function renderAppCard(app, branchCount = 0) {
+  const isBranch = !!app.parentId;
   const managedRunning = state.runningApps.find(r => r.id === app.id && r.running);
   const detected = state.detectedApps[app.id];
   const isRunning = managedRunning || detected;
@@ -983,7 +1015,8 @@ function renderAppCard(app) {
   if (reqs.remote) badges.push(`<span class="req-badge" title="Remote">${icon('globe', 10)}</span>`);
 
   const isSelected = state.selectedApps.has(app.id);
-  const isExpanded = state.expandedApps.has(app.id);
+  const isActive = state.drawerAppId === app.id;
+  const isStale = state.staleApps.has(app.id);
 
   // Action buttons
   let actionsHtml = '';
@@ -1002,13 +1035,14 @@ function renderAppCard(app) {
   }
 
   return `
-    <div class="app-card ${isSelected ? 'selected' : ''} ${isExpanded ? 'expanded' : ''}"
+    <div class="app-card ${isSelected ? 'selected' : ''} ${isActive ? 'drawer-open' : ''} ${isBranch ? 'is-branch' : ''} ${isStale ? 'is-stale' : ''}"
          data-id="${app.id}"
+         ${isBranch ? `style="--branch-color:${app.color}"` : ''}
          draggable="true"
          tabindex="0"
          role="button"
-         aria-expanded="${isExpanded}"
-         aria-label="${escapeHtml(app.name)} — press Enter to ${isExpanded ? 'collapse' : 'expand'} details"
+         aria-haspopup="dialog"
+         aria-label="${escapeHtml(app.name)} — press Enter to open details"
          >
       <span class="drag-handle" title="Drag to reorder" aria-hidden="true">${icon('grip', 14)}</span>
       <input type="checkbox" class="app-checkbox"
@@ -1025,6 +1059,9 @@ function renderAppCard(app) {
           ${app.isFavorite ? icon('star', 14) : icon('star-outline', 14)}
         </button>
         <span class="app-name-text">${escapeHtml(app.name)}</span>
+        ${app.branch ? `<span class="branch-chip" style="--branch-color:${app.color}" title="Branch / worktree">${icon('branch', 11)}${escapeHtml(app.branch)}</span>` : ''}
+        ${branchCount > 0 ? `<span class="branch-count" title="${branchCount} branch${branchCount !== 1 ? 'es' : ''}">${icon('branch', 10)}${branchCount}</span>` : ''}
+        ${isStale ? `<span class="stale-badge" title="Worktree folder is gone - safe to remove">stale</span>` : ''}
         ${portHtml}
         ${countdownHtml}
         ${statsHtml}
@@ -1035,15 +1072,10 @@ function renderAppCard(app) {
         ${actionsHtml}
       </div>
       <div class="app-actions">
+        ${!isBranch ? `<button class="btn btn-small btn-secondary" data-act="addBranch" data-id="${app.id}" title="Add a branch / worktree">${icon('branch', 12)}</button>` : ''}
         <button class="btn btn-small btn-secondary" data-act="openAppFolder" data-id="${app.id}" title="Open folder">${icon('folder', 12)}</button>
         <button class="btn btn-small btn-secondary" data-act="editApp" data-id="${app.id}" title="Edit">${icon('edit', 12)}</button>
         <button class="btn btn-small btn-secondary" data-act="deleteApp" data-id="${app.id}" title="Delete">${icon('trash', 12)}</button>
-      </div>
-      <div class="app-expanded-details">
-        <div class="app-detail-row"><span class="app-detail-label">CMD</span><span class="app-detail-value">${escapeHtml(app.command)}</span></div>
-        ${app.cwd ? `<div class="app-detail-row"><span class="app-detail-label">CWD</span><span class="app-detail-value">${escapeHtml(app.cwd)}</span></div>` : ''}
-        ${app.preferredPort ? `<div class="app-detail-row"><span class="app-detail-label">Port</span><span class="app-detail-value">${app.preferredPort}${app.fallbackRange ? ` (fallback: ${app.fallbackRange[0]}-${app.fallbackRange[1]})` : ''}</span></div>` : ''}
-        ${app.description ? `<div class="app-detail-row"><span class="app-detail-label">Info</span><span class="app-detail-value">${escapeHtml(app.description)}</span></div>` : ''}
       </div>
     </div>
   `;
@@ -1330,13 +1362,157 @@ function updateGroupSelects() {
 }
 
 // ============ App Card Expansion ============
-function toggleAppExpansion(appId) {
-  if (state.expandedApps.has(appId)) {
-    state.expandedApps.delete(appId);
+function fmtUptime(sec) {
+  if (!sec) return null;
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+// Slide-over detail drawer: opens on row click, shows the full untruncated
+// command/cwd plus live stats and safe actions (Start XOR Stop, never both).
+function openAppDrawer(appId) {
+  const app = state.apps.find(a => a.id === appId);
+  if (!app) return;
+  state.drawerAppId = appId;
+
+  const managedRunning = state.runningApps.find(r => r.id === app.id && r.running);
+  const detected = state.detectedApps[app.id];
+  const isRunning = !!(managedRunning || detected);
+  const starting = state.startingApps[app.id];
+  const conflict = state.unknownConflicts.find(c => c.appId === app.id);
+  const port = detected?.port ?? app.preferredPort;
+  const details = detected ? state.expandedPorts.get(detected.port) : null;
+
+  let statusClass = 'stopped', statusWord = 'Stopped';
+  if (starting) { statusClass = 'starting'; statusWord = 'Starting'; }
+  else if (isRunning) { statusClass = 'running'; statusWord = 'Running'; }
+  else if (conflict) { statusClass = 'conflict'; statusWord = 'Port blocked'; }
+
+  document.getElementById('app-drawer-status').className = `status-dot ${statusClass}`;
+  document.getElementById('app-drawer-title').textContent = app.name;
+
+  const field = (label, value, mono) => value
+    ? `<div class="drawer-field"><span class="drawer-field-label">${label}</span><span class="drawer-field-value${mono ? ' mono' : ''}">${escapeHtml(String(value))}</span></div>`
+    : '';
+
+  const fields = [
+    field('Status', statusWord + (managedRunning && detected?.pid ? ` · PID ${detected.pid}` : '')),
+    field('Branch', app.branch),
+    port ? field('Port', `:${port}${app.fallbackRange ? `  (fallback ${app.fallbackRange[0]}-${app.fallbackRange[1]})` : ''}`, true) : '',
+    field('Memory', details?.memory ? details.memory + ' MB' : ''),
+    field('Uptime', fmtUptime(details?.uptime)),
+    field('Command', app.command, true),
+    field('Directory', app.cwd, true),
+    field('Info', app.description),
+  ].filter(Boolean).join('');
+
+  // Primary action: Start XOR Stop (never both).
+  let primary;
+  if (conflict) {
+    primary = `<button class="btn btn-warning" data-act="killConflictingProcess" data-id="${app.id}">${icon('kill', 12)} Kill blocker</button>
+               <button class="btn btn-success" data-act="startApp" data-id="${app.id}">${icon('play', 12)} Start</button>`;
+  } else if (isRunning || starting) {
+    primary = `<button class="btn btn-danger" data-act="stopApp" data-id="${app.id}" ${starting ? 'disabled' : ''}>${icon('stop', 12)} Stop</button>`;
   } else {
-    state.expandedApps.add(appId);
+    primary = `<button class="btn btn-success" data-act="startApp" data-id="${app.id}">${icon('play', 12)} Start</button>`;
   }
+
+  const secondary = [
+    port ? `<button class="btn btn-secondary" data-act="openInBrowser" data-id="${app.id}">${icon('browser', 12)} Open</button>` : '',
+    managedRunning ? `<button class="btn btn-secondary" data-act="viewLogs" data-id="${app.id}">${icon('logs', 12)} Logs</button>` : '',
+    app.cwd ? `<button class="btn btn-secondary" data-act="openAppFolder" data-id="${app.id}">${icon('folder', 12)} Folder</button>` : '',
+    `<button class="btn btn-secondary" data-act="copyCmdPath" data-cmd="${escapeHtml(app.command)}">${icon('copy', 12)} Copy cmd</button>`,
+    !app.parentId ? `<button class="btn btn-secondary" data-act="addBranch" data-id="${app.id}">${icon('branch', 12)} Add branch</button>` : '',
+    !app.parentId ? `<button class="btn btn-secondary" data-act="detectWorktrees" data-id="${app.id}">${icon('branch', 12)} Add worktrees</button>` : '',
+    `<button class="btn btn-secondary" data-act="editApp" data-id="${app.id}">${icon('edit', 12)} Edit</button>`,
+    `<button class="btn btn-secondary" data-act="deleteApp" data-id="${app.id}">${icon('trash', 12)} Delete</button>`,
+  ].filter(Boolean).join('');
+
+  const stale = state.staleApps.has(app.id);
+  const staleBanner = stale
+    ? `<div class="drawer-stale">Worktree folder is gone (<span class="mono">${escapeHtml(app.worktreePath || app.cwd || '')}</span>). Safe to remove this entry.
+         <button class="btn btn-danger" data-act="deleteApp" data-id="${app.id}">${icon('trash', 12)} Remove entry</button></div>`
+    : '';
+
+  document.getElementById('app-drawer-body').innerHTML = `
+    ${staleBanner}
+    <div class="drawer-actions-primary">${primary}</div>
+    <div class="drawer-fields">${fields}</div>
+    <div class="drawer-actions">${secondary}</div>`;
+
+  document.getElementById('app-drawer-backdrop').classList.remove('hidden');
+  document.getElementById('app-drawer').classList.remove('hidden');
+  renderApps(); // re-render to mark the active row
+}
+
+function closeAppDrawer() {
+  state.drawerAppId = null;
+  document.getElementById('app-drawer-backdrop').classList.add('hidden');
+  document.getElementById('app-drawer').classList.add('hidden');
   renderApps();
+}
+
+// ---- Slice 9: detect a repo's git worktrees and bulk-add them as branches ----
+let worktreeCtx = null; // { parent, candidates }
+
+async function detectWorktrees(appId) {
+  const res = await window.portpilot.worktrees.detect(appId);
+  if (!res.success) { showToast(res.error || 'Could not detect worktrees', 'error'); return; }
+  const addable = res.candidates.filter(c => !c.registered);
+  if (res.candidates.length === 0) { showToast('No other worktrees found for this repo', 'info'); return; }
+  if (addable.length === 0) { showToast('All worktrees of this repo are already added', 'info'); return; }
+  worktreeCtx = res;
+  openWorktreesModal(res);
+}
+
+function openWorktreesModal(ctx) {
+  document.getElementById('worktrees-count').textContent = `${ctx.candidates.length} found`;
+  const list = document.getElementById('worktrees-list');
+  list.innerHTML = ctx.candidates.map((c, i) => {
+    const swatch = c.color ? `<span class="wt-swatch" style="background:${c.color}" title="${c.colorSource === 'peacock' ? 'Peacock colour' : 'colour'}"></span>` : '';
+    return `
+      <label class="discovery-item ${c.registered ? 'wt-registered' : ''}">
+        <input type="checkbox" data-wt-index="${i}" ${c.registered ? 'disabled' : 'checked'}>
+        ${swatch}
+        <span class="wt-branch">${c.branch ? escapeHtml(c.branch) : '(detached)'}</span>
+        <span class="wt-path">${escapeHtml(c.path)}</span>
+        ${c.registered ? '<span class="wt-badge">already added</span>' : ''}
+      </label>`;
+  }).join('');
+  document.getElementById('modal-worktrees').classList.remove('hidden');
+}
+
+function closeWorktreesModal() {
+  document.getElementById('modal-worktrees').classList.add('hidden');
+  worktreeCtx = null;
+}
+
+async function confirmAddWorktrees() {
+  if (!worktreeCtx) return;
+  const checks = [...document.querySelectorAll('#worktrees-list input[type="checkbox"]:checked')];
+  const picked = checks.map(c => worktreeCtx.candidates[Number(c.dataset.wtIndex)]).filter(Boolean);
+  if (picked.length === 0) { showToast('Select at least one worktree', 'info'); return; }
+
+  const parent = worktreeCtx.parent;
+  let added = 0;
+  for (const c of picked) {
+    const cfg = {
+      name: parent.name,
+      command: parent.command || 'npm run dev',
+      cwd: c.path,
+      parentId: parent.id,
+      branch: c.branch || null,
+      worktreePath: c.path,
+      preferredPort: null,
+    };
+    if (c.color) { cfg.color = c.color; cfg.colorSource = c.colorSource || 'peacock'; }
+    const r = await window.portpilot.config.saveApp(cfg);
+    if (r.success) added++;
+  }
+  closeWorktreesModal();
+  await loadApps();
+  showToast(`Added ${added} worktree${added !== 1 ? 's' : ''}`, 'success');
 }
 
 // Keyboard activation for app cards (Enter/Space toggles details), but only when
@@ -1345,18 +1521,8 @@ function handleCardKeydown(event, appId) {
   if (event.target !== event.currentTarget) return;
   if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
     event.preventDefault();
-    toggleAppExpansion(appId);
+    openAppDrawer(appId);
   }
-}
-
-function expandAllApps() {
-  state.apps.forEach(app => state.expandedApps.add(app.id));
-  renderApps();
-}
-
-function collapseAllApps() {
-  state.expandedApps.clear();
-  renderApps();
 }
 
 // ============ Drag and Drop ============
@@ -1771,16 +1937,33 @@ function selectGroupColor(color) {
 }
 
 // ============ Modal ============
-function openAppModal(app = null) {
-  document.getElementById('modal-title').textContent = app ? 'Edit App' : 'Add App';
+function openAppModal(app = null, opts = {}) {
+  const branchOf = opts.branchOf || null;        // parent app when adding a branch
+  const isBranchEdit = !!app?.parentId;          // editing an existing branch
+  const branchMode = !!branchOf || isBranchEdit; // show the Branch field
+
+  document.getElementById('modal-title').textContent =
+    app ? (isBranchEdit ? 'Edit Branch' : 'Edit App') : (branchOf ? 'Add Branch' : 'Add App');
   document.getElementById('app-id').value = app?.id || '';
-  document.getElementById('app-name').value = app?.name || '';
-  document.getElementById('app-command').value = app?.command || '';
+  // Parent linkage: an edit keeps the app's own parent; adding a branch links to branchOf.
+  document.getElementById('app-parent-id').value = app?.parentId || branchOf?.id || '';
+  document.getElementById('app-branch').value = app?.branch || '';
+
+  // Adding a branch seeds the command from the parent (same `npm run dev`), but
+  // leaves cwd/port blank so the user points it at the worktree folder - the
+  // distinct cwd is what lets PortPilot detect it separately from the parent.
+  // Browse & Auto-detect fills the rest from the chosen worktree directory.
+  document.getElementById('app-name').value = app?.name || (branchOf ? branchOf.name : '');
+  document.getElementById('app-command').value = app?.command || branchOf?.command || '';
   document.getElementById('app-cwd').value = app?.cwd || '';
   document.getElementById('app-port').value = app?.preferredPort || '';
-  document.getElementById('app-fallback').value = app?.fallbackRange ?
-    `${app.fallbackRange[0]}-${app.fallbackRange[1]}` : '';
+  document.getElementById('app-fallback').value = app?.fallbackRange
+    ? `${app.fallbackRange[0]}-${app.fallbackRange[1]}`
+    : (branchOf?.fallbackRange ? `${branchOf.fallbackRange[0]}-${branchOf.fallbackRange[1]}` : '');
   document.getElementById('app-autostart').checked = app?.autoStart || false;
+
+  const branchGroup = document.getElementById('app-branch-group');
+  if (branchGroup) branchGroup.classList.toggle('hidden', !branchMode);
 
   const groupSelect = document.getElementById('app-group');
   groupSelect.innerHTML = '<option value="">Other Projects (no group)</option>';
@@ -1793,7 +1976,15 @@ function openAppModal(app = null) {
   }
 
   dom.modal.classList.remove('hidden');
-  document.getElementById('app-name').focus();
+  document.getElementById(branchMode ? 'app-branch' : 'app-name').focus();
+}
+
+// Open the Add App modal in branch mode, linked to the given parent project.
+function addBranch(parentId) {
+  const parent = state.apps.find(a => a.id === parentId);
+  if (!parent) return;
+  openAppModal(null, { branchOf: parent });
+  showToast('Point the working directory at the branch/worktree folder', 'info');
 }
 
 function closeModal() {
@@ -1892,7 +2083,9 @@ async function handleAppSubmit(e) {
     preferredPort: parseInt(document.getElementById('app-port').value) || null,
     fallbackRange,
     autoStart: document.getElementById('app-autostart').checked,
-    group: document.getElementById('app-group').value || null
+    group: document.getElementById('app-group').value || null,
+    parentId: document.getElementById('app-parent-id').value || null,
+    branch: document.getElementById('app-branch').value.trim() || null
   };
 
   const result = await window.portpilot.config.saveApp(appConfig);
@@ -2162,9 +2355,8 @@ window.closeGroupModal = closeGroupModal;
 window.saveGroupModal = saveGroupModal;
 window.confirmDeleteGroup = confirmDeleteGroup;
 window.moveSelectedToGroup = moveSelectedToGroup;
-window.expandAllApps = expandAllApps;
-window.collapseAllApps = collapseAllApps;
-window.toggleAppExpansion = toggleAppExpansion;
+window.openAppDrawer = openAppDrawer;
+window.closeAppDrawer = closeAppDrawer;
 window.handleCardKeydown = handleCardKeydown;
 window.toggleGroup = toggleGroup;
 window.handleDragStart = handleDragStart;

@@ -72,6 +72,10 @@
       saveGroup: (group) => call('config:saveGroup', group),
       deleteGroup: (groupId) => call('config:deleteGroup', groupId)
     },
+    worktrees: {
+      detect: (appId) => call('worktrees:detect', appId),
+      stale: () => call('worktrees:stale')
+    },
     discovery: {
       scan: (scanPaths) => call('discovery:scan', scanPaths),
       addScanPath: (p) => call('discovery:addScanPath', p),

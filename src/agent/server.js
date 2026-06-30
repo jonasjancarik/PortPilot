@@ -29,6 +29,7 @@ const HOST = '127.0.0.1';
 const DEFAULT_PORT = parseInt(process.env.PORTPILOT_AGENT_PORT || '7317', 10);
 
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
+const CORE_DIR = path.join(__dirname, '..', 'core');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const MIME = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.svg': 'image/svg+xml' };
 
@@ -139,6 +140,10 @@ function createAgent({ configStore, port = DEFAULT_PORT, token = crypto.randomBy
       if (req.url === '/portpilot-web.js') return serveStatic(res, 'portpilot-web.js', PUBLIC_DIR);
       if (req.url === '/renderer.js') return serveStatic(res, 'renderer.js', RENDERER_DIR);
       if (req.url === '/styles.css') return serveStatic(res, 'styles.css', RENDERER_DIR);
+      // The renderer loads the shared status/classification model as a browser
+      // global (it can't require under CSP). Without this route it 404s and
+      // window.PortPilotStatus is undefined -> classify() throws on scan.
+      if (req.url === '/core/status.js') return serveStatic(res, 'status.js', CORE_DIR);
     }
     send(res, 404, 'Not found');
   });

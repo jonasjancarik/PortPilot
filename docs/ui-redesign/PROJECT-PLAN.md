@@ -88,11 +88,58 @@ If a true single-list merge is ever wanted, it belongs in its own phase with the
 
 | # | Phase | Surface | Scope | Effort | Status |
 |---|---|---|---|---|---|
-| 3 | Detail drawer + safe actions | desktop | Slide-over right drawer on row click: full untruncated command, PID, cwd, uptime, copy/kill/open. Reuse `expandedPorts` detail fetch. Hover-reveal row actions, Start XOR Stop never both. Gate kill off system rows (hidden/disabled + typed confirm). | M | later |
+| 3 | Detail drawer + safe actions | desktop | Slide-over right drawer on row click: full untruncated command, PID, cwd, uptime, copy/kill/open. Reuse `expandedPorts` detail fetch. Hover-reveal row actions, Start XOR Stop never both. Gate kill off system rows (hidden/disabled + typed confirm). | M | **done** (2026-06-30) |
 | 4 | Search + filters + sort | desktop | Replace the lone filter box with search + quick-filter chips (Mine / Dev / System / Conflicts) + sort dropdown, persisted in config. | S | later |
 | 5 | Settings refresh | desktop | Category sub-nav (Appearance / Scanning / Data / About) + detail pane. Theme picker as live-preview swatch tiles painted in each palette. Scan-interval as a segmented control. Optional: move primary nav to a left icon rail. | M | later |
-| 6 | VS Code parity | vscode | Apply the shared model to both tree views: status `ThemeIcon` coloured by `ThemeColor`, label + dimmed description ("node :3000" + "PID 18244 - next dev"), grouping with System collapsed, kill gated behind `contextValue`. Feed running count to the "PP: N running" item. Keep the tree in the narrow sidebar (no third pane). | M | later |
+| 6 | VS Code parity | vscode | Apply the shared model to both tree views: status `ThemeIcon` coloured by `ThemeColor`, label + dimmed description ("node :3000" + "PID 18244 - next dev"), grouping with System collapsed, kill gated behind `contextValue`. Feed running count to the "PP: N running" item. Keep the tree in the narrow sidebar (no third pane). | M | **done** (2026-06-30) |
 | 7 | Web portal verify | web | Confirm the portal inherits grouping, status dots, unified list, and drawer once the renderer updates. Verify per-theme status CSS vars and collapse/pin/filter state read correctly over the loopback agent. | S | later |
+
+### Wave 3 - worktree & branch awareness (NEW track, sequenced after/alongside Wave 2)
+
+The problem: most real dev work happens in a git worktree or branch that runs on a *different* port than the one configured on the main app. PortPilot shows the configured app as "stopped" and the user falls back to manually prompting Claude to "load in localhost". Worktrees are invisible.
+
+The insight: matching is already **cwd-keyed** (`matchPortsToApps` in `src/main/ipcHandlers.js` L168 - Phase 1 matches when the app's `cwd` appears in the running command line; Phase 2 validates `preferredPort` against cwd/keywords). A worktree has a distinct cwd, so a worktree registered as its own app *already* gets detected on whatever port it grabbed, distinct from main and simultaneously. The missing pieces are hierarchy, detection, colour, and a register-from-Claude path - not new matching logic.
+
+Data model (all optional, backward-compatible additions to the app record):
+- `parentId` - id of the main project app (null = top-level project; the primary worktree is the natural parent)
+- `branch` - branch name string, e.g. `feat/wave2` (display label)
+- `worktreePath` - worktree's absolute path (= cwd; explicit semantic for detection/pruning)
+- `colorSource` - `peacock | manual | auto` (so a Peacock-synced colour re-syncs while a hand-set one stays put)
+
+| # | Slice (vertical) | Surface | Scope | Effort | Status |
+|---|---|---|---|---|---|
+| 8 | Hierarchy + manual branch | desktop (core/config/renderer) | `parentId`/`branch` persisted in config; children render indented under parent with a branch chip coloured by app colour, excluded from top-level lists; "+ branch" action on a parent opens the Add App modal pre-filled (parent's command/cwd, parentId set, branch field). Matching already distinguishes them. Shippable proof: two branches of one repo run side-by-side. | M | **in progress** (2026-06-30) |
+| 9 | Worktree auto-detect | desktop + main | `git worktree list --porcelain` from a registered app's cwd enumerates worktrees + branches; primary worktree = parent; an "Add worktrees" action lists unregistered ones. New IPC handler. | M | **done** (2026-06-30) |
+| 10 | Peacock colour sync | desktop + main | Read `<worktree>/.vscode/settings.json` -> `peacock.color` (fallback `workbench.colorCustomizations`); use as row accent so PortPilot row == the VS Code window colour. `colorSource:'peacock'`. | S | later |
+| 11 | MCP `add_worktree` + skill | mcp + skill | Extend MCP so Claude registers the current worktree under its parent on a given port (resolving git + Peacock). Wire the `/new-worktree` skill to call it on mint - kills the manual "load in localhost" prompting. | M | **done** (2026-06-30) |
+| 12 | Stale pruning | desktop + main | On scan, if a child's `worktreePath` is gone from `git worktree list`, badge "stale (worktree removed)" + one-click remove. Ties into the existing `wt-cleanup` hook. | S | **done** (2026-06-30) |
+
+Wave 3 gate: Slice 8 ships and proves the model before scoping 9-12. Slices 9-12 are independent enough to parallelise once 8 lands.
+
+**Wave 3 complete (2026-06-30):** slices 8, 11, 3, 9, 6, 12 all landed; Slice 10 (Peacock colour) delivered via mint + detect (only optional re-sync-on-scan deferred). Desktop app and web portal share the renderer verbatim, so all renderer-side work applies to both; the VS Code extension tree views got the shared model in slice 6.
+
+#### Slice 12 landed (2026-06-30)
+On load, `worktrees:stale` (shared `detectStaleWorktrees` in ipcHandlers, wired into IPC + agent dispatch + web shim) returns the ids of branch/worktree apps whose folder is gone (`worktreePath`/`cwd` missing; plain apps are never flagged). Those rows get a red `STALE` badge with a struck-through name, and their drawer shows a "Worktree folder is gone - safe to remove" banner with a one-click **Remove entry**. Test: `tests/worktree-detect.test.cjs` (+1 case). Verified live (removed `portpilot-wt2` on disk -> its entry flagged stale in the portal).
+
+#### Slice 8 landed (2026-06-30)
+Hierarchy + manual branch on the desktop renderer. Children nest under the parent in an `.app-tree`, excluded from top-level lists, with a colour-railed branch chip and a parent "N branches" count; "+ branch" opens the Add App modal in branch mode pre-linked to the parent. Verified via `tests/visual-branches.js` (real Electron, seeded parent+2 branches). The web portal serves the renderer verbatim, so it inherits this. Slice 7 (web parity) is therefore largely covered for this feature.
+
+#### Slice 11 landed (2026-06-30) - MCP tool
+`add_worktree` MCP tool (19 tools total): takes a worktree path, auto-detects the branch via `git rev-parse` and the parent via the repo's primary worktree (`git worktree list --porcelain`, realpath-canonicalised for Windows 8.3 paths), and upserts a child app linked to the matched parent. Pure logic (`resolveWorktreeGit` / `registerWorktree`) extracted and unit-tested in `tests/mcp-worktree.test.mjs` (14 cases incl. a real linked-worktree integration). `main()` is now guarded so the module is importable for tests.
+
+Also shipped a headless `node mcp-server/index.js register-worktree --path ... [--branch --port --color --parent --name --command]` CLI reusing the same logic, and wired it into `~/.claude/scripts/wt-mint.sh` (step 7c, non-fatal) so every `/new-worktree` mint auto-registers the branch in PortPilot, coloured with the window's Peacock colour. That colour passthrough (`colorSource: 'peacock'`) delivers Slice 10's value for minted worktrees; Slice 10 proper still owns reading Peacock for manually-added branches and re-syncing on scan.
+
+#### Slice 3 landed (2026-06-30)
+Hover-reveal + tone-down of row actions (ghost icon buttons, both action groups fade in on hover/focus/selection) and a right-hand **detail drawer** that replaces the inline expand. Row click / Enter opens the drawer: status+PID, branch, port (+fallback), memory, uptime, full command, cwd, plus Start XOR Stop and Open/Folder/Copy-cmd/Add-branch/Edit/Delete. The source row stays highlighted; backdrop click / X / Escape close it. Inline-expand and the EXPAND/COLLAPSE toolbar buttons were removed (the drawer supersedes them). Also a **density + chip restyle** pass (denser rows, calm hover, port/requirement as quiet chips, softer branch chip, condensed empty groups) and a portal fix (serve `core/status.js` so classification works in the browser). Verified live in the web portal; 9/9 E2E, 26/26 unit, Slice 8 visual all green.
+
+#### Slice 9 landed (2026-06-30)
+"Add worktrees" in the app drawer runs `worktrees:detect` (new shared `detectWorktrees` in ipcHandlers, wired into the Electron IPC, the agent dispatcher, and the web shim). It runs `git worktree list --porcelain` in the app's cwd, marks which worktrees are already registered (by cwd), and reads each one's Peacock colour from `.vscode/settings.json` (JSONC-tolerant regex). A picker modal lists candidates (registered ones disabled) with their colour swatch; confirming bulk-registers them nested under the parent. This also delivers most of **Slice 10** - manually-added branches now get the exact Peacock hex (`colorSource: peacock`); only periodic re-sync-on-scan remains. Tests: `tests/worktree-detect.test.cjs` (4 cases, real on-disk repo+worktree). Verified live in the portal (detect -> modal -> add -> nested, 11->12 apps).
+
+#### Slice 6 completed (2026-06-30) - ports tree
+The VS Code ports tree now groups active ports into Dev Servers / Other User Ports / System & OS (System collapsed by default), mirroring the desktop, via collapsible `PortGroupTreeItem`s. Each port gets a status-coloured `circle-filled` icon (dev green / other blue / system grey). **Kill-gating:** system ports use `contextValue: 'active-port-system'` so the kill / open-in-browser context-menu items (gated on `viewItem == active-port`) never appear for OS-owned ports. Classification reuses the shared `core/status.js` - now shipped into `runtime/core/` by copy-runtime and required relative to `out/` (single source of truth, no duplicated logic). Extension bumped 3.1.2 -> 3.1.3. tsc clean; runtime module verified (node:3000 -> dev, svchost:135 -> system).
+
+#### Slice 6 landed (2026-06-30) - apps tree, partial
+The VS Code apps tree now nests branch children under their parent as collapsible `TreeItem`s (`getChildren` returns a parent's `children`; children excluded from top-level/group lists), mirroring the desktop renderer. A branch row uses the `git-branch` ThemeIcon colour-coded to the nearest `charts.*` palette entry (hue-mapped from the branch colour, so it tracks the window's Peacock colour - a TreeView can't paint arbitrary per-row hex), with `⎇ <branch>` in the description; a parent shows a `⎇N` branch count. `PortPilotApp` gained the optional `parentId`/`branch`/`worktreePath`/`colorSource` fields. **Still pending for Slice 6:** ports-tree grouping (Dev/Other/System, System collapsed) and kill-gating on system rows. Note: rebuilding `out/` does not hot-update an installed extension - the user must reload the Extension Development Host or reinstall the `.vsix`.
 
 ## What this plan does NOT cover
 

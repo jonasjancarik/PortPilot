@@ -17,6 +17,7 @@ import fs from 'fs';
 import path from 'path';
 import { execSync, exec } from 'child_process';
 import os from 'os';
+import { pathToFileURL } from 'url';
 
 // =============================================================================
 // CONFIG
@@ -59,6 +60,120 @@ function writeConfig(config) {
 
 function generateId() {
   return `app_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+}
+
+// =============================================================================
+// WORKTREE / BRANCH AWARENESS (Wave 3, Slice 11)
+// =============================================================================
+
+// Normalise a path for case-insensitive, slash-insensitive comparison - matches
+// the desktop renderer / ipcHandlers cwd-matching so all clients agree.
+function normPath(p) {
+  return path.normalize(String(p || '')).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+}
+
+// Deterministic colour from a seed (branch or path) so re-registering a worktree
+// keeps its colour and sibling branches get distinct ones. Slice 10 will replace
+// this with the Peacock window colour when present.
+const WORKTREE_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#6366F1'];
+function pickColor(seed) {
+  const s = String(seed || '');
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return WORKTREE_COLORS[h % WORKTREE_COLORS.length];
+}
+
+// Resolve the git branch and the repo's PRIMARY worktree path for a directory.
+// The primary worktree is the first entry of `git worktree list`. If `dir` is a
+// linked worktree, mainWorktree differs from dir. Returns nulls for a non-repo.
+function resolveWorktreeGit(dir) {
+  const run = (cmd) => execSync(cmd, { cwd: dir, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  try {
+    const branch = run('git rev-parse --abbrev-ref HEAD') || null;
+    let mainWorktree = null;
+    try {
+      const m = run('git worktree list --porcelain').match(/^worktree (.+)$/m);
+      if (m) {
+        mainWorktree = m[1].trim();
+        // Canonicalise: git can return an 8.3 short path on Windows while the
+        // registered app cwd is the long form, which would defeat the parent
+        // match. realpath resolves both to the same canonical path.
+        try { mainWorktree = fs.realpathSync.native(mainWorktree); } catch { /* keep raw */ }
+      }
+    } catch { /* old git or detached - branch alone is enough */ }
+    const isWorktree = mainWorktree ? normPath(mainWorktree) !== normPath(dir) : false;
+    return { branch, mainWorktree, isWorktree };
+  } catch {
+    return { branch: null, mainWorktree: null, isWorktree: false };
+  }
+}
+
+// Pure registration logic: given the current config, the user input, and an
+// already-resolved git result, upsert the worktree app (mutating config.apps)
+// and return a structured result. No IO - this is what the unit test drives.
+function registerWorktree(config, input, git, now) {
+  const wtPath = input.path;
+  if (!config.apps) config.apps = [];
+
+  const resolvedBranch = input.branch || git.branch || null;
+
+  // Parent: explicit (by id/name) wins; else match the main worktree to a
+  // registered app's cwd. Never nest a worktree under itself.
+  let parentApp = null;
+  if (input.parent) {
+    parentApp = config.apps.find(a => a.id === input.parent || (a.name || '').toLowerCase() === input.parent.toLowerCase()) || null;
+    if (!parentApp) return { ok: false, error: `Parent app not found: ${input.parent}` };
+  } else if (git.mainWorktree) {
+    parentApp = config.apps.find(a => a.cwd && normPath(a.cwd) === normPath(git.mainWorktree)) || null;
+  }
+  if (parentApp && normPath(parentApp.cwd) === normPath(wtPath)) parentApp = null;
+
+  const resolvedName = input.name || parentApp?.name || path.basename(wtPath);
+  const resolvedCommand = input.command || parentApp?.command || 'npm run dev';
+
+  // Upsert by cwd so re-registering a worktree updates instead of duplicating.
+  const idx = config.apps.findIndex(a => a.cwd && normPath(a.cwd) === normPath(wtPath));
+  const existing = idx >= 0 ? config.apps[idx] : null;
+
+  const app = {
+    ...(existing || {}),
+    id: existing?.id || generateId(),
+    name: resolvedName,
+    command: resolvedCommand,
+    cwd: wtPath,
+    preferredPort: input.preferredPort ?? existing?.preferredPort ?? null,
+    fallbackRange: existing?.fallbackRange ?? null,
+    env: existing?.env ?? {},
+    autoStart: existing?.autoStart ?? false,
+    isFavorite: existing?.isFavorite ?? false,
+    group: existing?.group ?? null,
+    description: existing?.description ?? null,
+    parentId: parentApp?.id || null,
+    branch: resolvedBranch,
+    worktreePath: wtPath,
+    // An explicit colour (e.g. the VS Code window's Peacock colour, passed by
+    // wt-mint) wins and is tagged so a later manual change can be respected.
+    colorSource: input.colorSource ?? existing?.colorSource ?? null,
+    color: input.color || existing?.color || pickColor(resolvedBranch || wtPath),
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+  };
+
+  if (idx >= 0) config.apps[idx] = app; else config.apps.push(app);
+
+  const notes = [];
+  if (!parentApp) notes.push('No registered parent project found - registered as a standalone app. Register the main repo or pass `parent` so this nests under it.');
+  if (parentApp && app.preferredPort && parentApp.preferredPort === app.preferredPort) notes.push(`Port ${app.preferredPort} matches the parent's preferred port - they will collide if both run. Pick a different port.`);
+  if (!git.branch && !input.branch) notes.push('Could not detect a git branch for this path - no branch label set.');
+
+  return {
+    ok: true,
+    action: idx >= 0 ? 'updated' : 'added',
+    app,
+    parent: parentApp ? { id: parentApp.id, name: parentApp.name } : null,
+    branch: resolvedBranch,
+    notes,
+  };
 }
 
 // =============================================================================
@@ -573,6 +688,34 @@ function createServer() {
     }
   );
 
+  // --- Add Worktree / Branch ---
+
+  server.tool(
+    'add_worktree',
+    'Register a git worktree or branch of a project so it appears nested under the main project in PortPilot and can run on its own port alongside it. Auto-detects the branch and the parent repo from git. Use this instead of add_app when registering a branch/worktree of an already-registered project - e.g. when working in a worktree that runs on a different port than the configured one.',
+    {
+      path: z.string().describe('Absolute path to the worktree / branch working directory'),
+      command: z.string().optional().describe('Start command; defaults to the parent app command or "npm run dev"'),
+      preferredPort: z.number().optional().describe('Preferred port for this branch - use a DIFFERENT port than the parent so both can run'),
+      branch: z.string().optional().describe('Branch label shown on the row; auto-detected from git if omitted'),
+      parent: z.string().optional().describe('Parent app id or name to nest under; auto-resolved from the repo\'s main worktree if omitted'),
+      name: z.string().optional().describe('Display name; defaults to the parent name or the folder name'),
+    },
+    async ({ path: wtPath, command, preferredPort, branch, parent, name }) => {
+      if (!fs.existsSync(wtPath)) {
+        return { content: [{ type: 'text', text: `Path does not exist: ${wtPath}` }], isError: true };
+      }
+      const config = readConfig();
+      const git = resolveWorktreeGit(wtPath);
+      const result = registerWorktree(config, { path: wtPath, command, preferredPort, branch, parent, name }, git, new Date().toISOString());
+      if (!result.ok) {
+        return { content: [{ type: 'text', text: result.error }], isError: true };
+      }
+      writeConfig(config);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
   // --- Update App ---
 
   server.tool(
@@ -803,8 +946,47 @@ async function startHttp(port, host) {
   });
 }
 
+// Minimal --flag value parser for the register-worktree CLI.
+function parseFlags(args) {
+  const out = {};
+  for (let i = 0; i < args.length; i++) {
+    if (!args[i].startsWith('--')) continue;
+    const key = args[i].slice(2);
+    const next = args[i + 1];
+    out[key] = (next && !next.startsWith('--')) ? args[++i] : 'true';
+  }
+  return out;
+}
+
+// `node index.js register-worktree --path <dir> [--branch] [--port] [--color]
+// [--parent] [--name] [--command]` - lets wt-mint.sh (and any script) register a
+// worktree in PortPilot without an MCP round-trip. Reuses the same tested logic
+// as the add_worktree tool and writes the shared config the desktop app watches.
+function runRegisterWorktreeCli(args) {
+  const f = parseFlags(args);
+  if (!f.path) { console.error('register-worktree: --path is required'); process.exit(64); }
+  if (!fs.existsSync(f.path)) { console.error(`register-worktree: path does not exist: ${f.path}`); process.exit(66); }
+  const config = readConfig();
+  const git = resolveWorktreeGit(f.path);
+  const result = registerWorktree(config, {
+    path: f.path,
+    branch: f.branch,
+    parent: f.parent,
+    name: f.name,
+    command: f.command,
+    preferredPort: f.port ? parseInt(f.port, 10) : undefined,
+    color: f.color,
+    colorSource: f.color ? 'peacock' : undefined,
+  }, git, new Date().toISOString());
+  if (!result.ok) { console.error(result.error); process.exit(1); }
+  writeConfig(config);
+  console.log(JSON.stringify(result, null, 2));
+  process.exit(0);
+}
+
 async function main() {
   const args = process.argv.slice(2);
+  if (args[0] === 'register-worktree') return runRegisterWorktreeCli(args.slice(1));
   const portIdx = args.indexOf('--port');
   const portArg = portIdx !== -1 ? args[portIdx + 1] : process.env.PORTPILOT_MCP_PORT;
   const port = portArg ? parseInt(portArg, 10) : null;
@@ -819,4 +1001,9 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only auto-start when run as the entry point (node index.js / fork), not when
+// imported by a test. Pure helpers below are exported for unit testing.
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) main().catch(console.error);
+
+export { normPath, pickColor, resolveWorktreeGit, registerWorktree };

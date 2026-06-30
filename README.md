@@ -51,6 +51,31 @@ Control PortPilot with natural language! Works with Claude Code, Cursor, Windsur
 
 **[→ Setup MCP Integration](mcp-server/README.md)**
 
+## What's New in v3.2.0
+
+### Branch & worktree awareness
+
+Run several git branches or worktrees of the same project at once - each on its own port, nested under the parent project and colour-coded to match its VS Code (Peacock) window. No more hand-launching a branch's dev server because it runs on a different port than the configured one.
+
+![PortPilot branch and worktree awareness](docs/ui-redesign/wave3-hero-web.png)
+
+- **Nested branches** - a worktree/branch shows indented under its main project with a colour rail, branch chip, and a per-parent count, so multiple branches of one repo are visible and runnable simultaneously.
+- **Add worktrees** - point PortPilot at a project and it detects the repo's git worktrees (`git worktree list`) and bulk-adds the unregistered ones, reading each one's Peacock colour from `.vscode/settings.json`.
+- **Auto-register on mint** - registering a worktree is one MCP call (`add_worktree`) or a headless CLI, so a new-worktree workflow can put each branch into PortPilot automatically.
+- **Stale pruning** - if a worktree's folder is removed, its entry is flagged `STALE` with a one-click remove.
+
+### Detail drawer + a calmer, denser UI
+
+Clicking a row opens a slide-over **detail drawer** (full command, working directory, PID, uptime, branch) with Start/Stop, Open, Copy, Add-branch and Remove actions. Rows are denser with hover-revealed actions, and ports and requirements render as quiet chips. The same renderer drives the desktop app and the browser portal, so they look and behave identically.
+
+![Detail drawer](docs/ui-redesign/slice3b-drawer.png)
+
+![Add worktrees](docs/ui-redesign/slice9-detect-modal.png)
+
+### VS Code extension parity
+
+The extension's tree views adopt the shared model: branches nest under their project with a colour-coded branch icon, and the Active Ports view groups into Dev Servers / Other User Ports / System & OS (System collapsed), with kill disabled on OS-owned ports.
+
 ## What's New in v3.1.0
 
 ### Web portal, hosted from VS Code
@@ -599,6 +624,7 @@ Just ask in natural language:
 | `bulk_start` | Start multiple apps at once |
 | `bulk_stop` | Stop multiple apps at once |
 | `add_app` | Register a new app |
+| `add_worktree` | Register a git worktree/branch nested under its parent project (auto-detects branch + parent from git) |
 | `update_app` | Update app configuration |
 | `delete_app` | Remove an app |
 | `list_running` | Show currently running apps |

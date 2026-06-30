@@ -46,8 +46,6 @@
               <option value="status">By Status</option>
               <option value="port">By Port</option>
             </select>
-            <button type="button" id="btn-expand-all" class="btn btn-small btn-secondary" title="Expand all">Expand</button>
-            <button type="button" id="btn-collapse-all" class="btn btn-small btn-secondary" title="Collapse all">Collapse</button>
             <button type="button" id="btn-new-group" class="btn btn-small btn-secondary" title="New group (Ctrl+G)">Group</button>
           </div>
           <span id="apps-count" class="count-badge">0 apps</span>
@@ -85,6 +83,17 @@
         </div>
       </div>
     </main>
+
+    <!-- App detail slide-over drawer -->
+    <div id="app-drawer-backdrop" class="drawer-backdrop hidden" data-act="closeAppDrawer"></div>
+    <aside id="app-drawer" class="app-drawer hidden" role="dialog" aria-label="App details">
+      <div class="drawer-header">
+        <span id="app-drawer-status" class="status-dot stopped"></span>
+        <h2 id="app-drawer-title">App</h2>
+        <button class="btn-close" id="app-drawer-close" data-act="closeAppDrawer" aria-label="Close details"></button>
+      </div>
+      <div id="app-drawer-body" class="drawer-body"></div>
+    </aside>
 
     <!-- Settings Slide-out Panel -->
     <div id="settings-backdrop" class="settings-backdrop hidden"></div>
@@ -190,9 +199,14 @@
         </div>
         <form id="app-form">
           <input type="hidden" id="app-id">
+          <input type="hidden" id="app-parent-id">
           <div class="form-group">
             <label for="app-name">App Name</label>
             <input type="text" id="app-name" required placeholder="e.g., AzurePrep Frontend">
+          </div>
+          <div class="form-group hidden" id="app-branch-group">
+            <label for="app-branch">Branch / Worktree</label>
+            <input type="text" id="app-branch" placeholder="e.g., feat/wave2">
           </div>
           <div class="form-group">
             <label for="app-command">Command</label>
@@ -252,6 +266,22 @@
           <button type="button" class="btn btn-secondary" id="btn-select-all-projects">Select All</button>
           <button type="button" class="btn btn-primary hidden" id="btn-add-selected-projects">Add Selected</button>
           <button type="button" class="btn btn-primary" id="btn-add-all-discoveries">Add All</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detect Worktrees Modal -->
+    <div id="modal-worktrees" class="modal hidden">
+      <div class="modal-content modal-wide">
+        <div class="modal-header">
+          <h2>Add Worktrees</h2>
+          <span id="worktrees-count" class="count-badge">0 found</span>
+          <button type="button" class="btn-close" data-act="closeWorktreesModal" aria-label="Close"></button>
+        </div>
+        <div class="discoveries-list" id="worktrees-list"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-act="closeWorktreesModal">Cancel</button>
+          <button type="button" class="btn btn-primary" data-act="confirmAddWorktrees">Add Selected</button>
         </div>
       </div>
     </div>
