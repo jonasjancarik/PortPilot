@@ -2,7 +2,7 @@
 
 <img src="public/icon.png" alt="PortPilot logo" width="112" height="112">
 
-# PortPilot
+# ⚓ PortPilot
 
 **Localhost Port Manager for Windows &amp; Linux**
 
