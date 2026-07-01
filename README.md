@@ -1,16 +1,24 @@
+<div align="center">
+
+<img src="public/icon.png" alt="PortPilot logo" width="112" height="112">
+
 # PortPilot
 
-**Localhost Port Manager for Windows & Linux** - A desktop app for developers to manage local development ports and applications.
+**Localhost Port Manager for Windows &amp; Linux**
 
-**[View Landing Page & Download](https://m4cd4r4.github.io/PortPilot/)**
+One dashboard for every local dev server across all your projects - including several git branches of the same repo running at once, nested and colour-coded.
 
-**[MCP Integration Setup](mcp-server/README.md)**
+*Local-first. No accounts, no telemetry, no cloud. It runs entirely on your machine.*
 
 [![Version](https://img.shields.io/badge/version-3.2.0-blue.svg)](https://github.com/m4cd4r4/PortPilot/releases/tag/v3.2.0)
 [![Tests](https://img.shields.io/badge/tests-Playwright%20E2E-blue.svg)](tests/)
 [![Licence](https://img.shields.io/badge/licence-MIT-green.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-enabled-purple.svg)](mcp-server/README.md)
 [![VS Code Marketplace](https://vsmarketplacebadges.dev/version-short/macdara.portpilot.svg)](https://marketplace.visualstudio.com/items?itemName=macdara.portpilot)
+
+**[View Landing Page &amp; Download](https://m4cd4r4.github.io/PortPilot/)** &nbsp;&middot;&nbsp; **[MCP Integration Setup](mcp-server/README.md)**
+
+</div>
 
 ![PortPilot](docs/screenshots/slot1.png)
 
