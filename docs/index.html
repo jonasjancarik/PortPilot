@@ -52,7 +52,7 @@
       "price": "0",
       "priceCurrency": "USD"
     },
-    "softwareVersion": "3.1.0",
+    "softwareVersion": "3.2.0",
     "author": {
       "@type": "Person",
       "name": "Macdara",
@@ -64,9 +64,12 @@
     "license": "https://opensource.org/licenses/MIT",
     "isAccessibleForFree": true,
     "featureList": [
+      "Branch and worktree awareness with nested, colour-coded rows",
+      "Run multiple branches of one project at once on separate ports",
       "Port scanning with process details",
       "One-click port killing",
       "App registry with start/stop control",
+      "Detail drawer with live stats and safe actions",
       "Project auto-discovery",
       "Docker integration",
       "6 color themes",
@@ -121,31 +124,22 @@
             <p class="description">Scan active ports, kill stuck processes, register your dev apps, and take control of your local development environment.</p>
             <div class="cta-buttons">
               <a href="#download" class="btn btn-primary">
-                <span class="btn-icon" aria-hidden="true">&#11015;</span> Download v3.1.0
+                <span class="btn-icon" aria-hidden="true">&#11015;</span> Download v3.2.0
               </a>
               <a href="https://github.com/m4cd4r4/PortPilot" class="btn btn-secondary" rel="noopener">
                 <span class="btn-icon" aria-hidden="true">&#11088;</span> View on GitHub
               </a>
             </div>
-            <p class="version-note">Windows 10/11 &amp; Linux &middot; v3.1.0 &middot; MIT Licence</p>
+            <p class="version-note">Windows 10/11 &amp; Linux &middot; v3.2.0 &middot; MIT Licence</p>
           </div>
           <div class="hero-mockup">
             <div class="screenshot-carousel" role="region" aria-label="Screenshot carousel" aria-roledescription="carousel">
               <div class="carousel-container">
-                <div class="carousel-slide active" role="tabpanel" aria-label="Slide 1 of 5">
-                  <img src="screenshots/slot1.png" alt="PortPilot single-pane layout showing apps and ports in one scrollable view" width="800" height="500" loading="eager">
+                <div class="carousel-slide active" role="tabpanel" aria-label="Slide 1 of 2">
+                  <img src="screenshots/slot1.png" alt="PortPilot showing branches nested under their project, colour-coded, with active ports grouped into Dev, Other and System" width="800" height="500" loading="eager">
                 </div>
-                <div class="carousel-slide" role="tabpanel" aria-label="Slide 2 of 5">
-                  <img src="screenshots/slot2.png" alt="Port Scanner view displaying active TCP ports with process info" width="800" height="500" loading="lazy">
-                </div>
-                <div class="carousel-slide" role="tabpanel" aria-label="Slide 3 of 5">
-                  <img src="screenshots/slot3.png" alt="Port details showing memory, uptime, connections, and process info" width="800" height="500" loading="lazy">
-                </div>
-                <div class="carousel-slide" role="tabpanel" aria-label="Slide 4 of 5">
-                  <img src="screenshots/slot4.png" alt="Theme selector showing all 7 available themes including Glass" width="800" height="500" loading="lazy">
-                </div>
-                <div class="carousel-slide" role="tabpanel" aria-label="Slide 5 of 5">
-                  <img src="screenshots/slot5.png" alt="Settings panel with auto-scan, theme, and window behavior options" width="800" height="500" loading="lazy">
+                <div class="carousel-slide" role="tabpanel" aria-label="Slide 2 of 2">
+                  <img src="screenshots/slot2.png" alt="PortPilot detail drawer showing a running app's branch, port, memory, uptime, command and actions" width="800" height="500" loading="lazy">
                 </div>
               </div>
               <button type="button" class="carousel-btn carousel-prev" aria-label="Previous screenshot">&#10094;</button>
@@ -153,9 +147,6 @@
               <div class="carousel-dots" role="tablist" aria-label="Screenshot slides">
                 <button class="dot active" role="tab" aria-label="Show slide 1" aria-selected="true"></button>
                 <button class="dot" role="tab" aria-label="Show slide 2" aria-selected="false"></button>
-                <button class="dot" role="tab" aria-label="Show slide 3" aria-selected="false"></button>
-                <button class="dot" role="tab" aria-label="Show slide 4" aria-selected="false"></button>
-                <button class="dot" role="tab" aria-label="Show slide 5" aria-selected="false"></button>
               </div>
             </div>
           </div>
@@ -168,6 +159,27 @@
       <div class="container">
         <h2 id="features-heading">Features</h2>
         <div class="features-grid">
+          <div class="feature-card">
+            <span class="feature-icon" aria-hidden="true">&#127807;</span>
+            <div class="feature-text">
+              <h3>Branch &amp; Worktree Awareness</h3>
+              <p>Run several git branches or worktrees of one project at once, each on its own port. Branches nest under the parent, colour-coded to match their VS Code (Peacock) window.</p>
+            </div>
+          </div>
+          <div class="feature-card">
+            <span class="feature-icon" aria-hidden="true">&#128256;</span>
+            <div class="feature-text">
+              <h3>Add Worktrees</h3>
+              <p>Point PortPilot at a project and it detects the repo's git worktrees and bulk-adds them nested under it. Stale entries (folder gone) are flagged for one-click removal.</p>
+            </div>
+          </div>
+          <div class="feature-card">
+            <span class="feature-icon" aria-hidden="true">&#128203;</span>
+            <div class="feature-text">
+              <h3>Detail Drawer</h3>
+              <p>Click any row for a slide-over with the full command, working directory, PID, uptime and branch, plus Start/Stop, Open, Copy and Remove actions.</p>
+            </div>
+          </div>
           <div class="feature-card">
             <span class="feature-icon" aria-hidden="true">&#128269;</span>
             <div class="feature-text">
@@ -321,7 +333,7 @@
             <div class="step-content">
               <h3>Download</h3>
               <p>Get the installer from GitHub Releases.</p>
-              <a href="#download" class="btn btn-small">Download v3.1.0</a>
+              <a href="#download" class="btn btn-small">Download v3.2.0</a>
             </div>
           </div>
           <div class="step">
@@ -498,32 +510,32 @@
     <!-- Download Section -->
     <section class="download-section" id="download" aria-labelledby="download-heading">
       <div class="container">
-        <h2 id="download-heading">Download PortPilot <span class="version-badge">v3.1.0</span></h2>
+        <h2 id="download-heading">Download PortPilot <span class="version-badge">v3.2.0</span></h2>
         <p class="section-subtitle">Free, open source, no account required</p>
 
         <h3 class="platform-heading">Windows</h3>
         <div class="download-options">
-          <a href="https://github.com/m4cd4r4/PortPilot/releases/download/v3.1.0/PortPilot-3.1.0-x64.exe" class="download-card" rel="noopener">
+          <a href="https://github.com/m4cd4r4/PortPilot/releases/download/v3.2.0/PortPilot-3.2.0-x64.exe" class="download-card" rel="noopener">
             <div class="download-icon" aria-hidden="true">&#128230;</div>
             <div class="download-info">
               <h4>Windows Installer</h4>
               <p>NSIS installer for Windows 10/11</p>
             </div>
-            <span class="download-size">~72 MB</span>
+            <span class="download-size">~75 MB</span>
           </a>
-          <a href="https://github.com/m4cd4r4/PortPilot/releases/download/v3.1.0/PortPilot-3.1.0-portable.exe" class="download-card" rel="noopener">
+          <a href="https://github.com/m4cd4r4/PortPilot/releases/download/v3.2.0/PortPilot-3.2.0-portable.exe" class="download-card" rel="noopener">
             <div class="download-icon" aria-hidden="true">&#128188;</div>
             <div class="download-info">
               <h4>Portable</h4>
               <p>No install needed, run anywhere</p>
             </div>
-            <span class="download-size">~72 MB</span>
+            <span class="download-size">~75 MB</span>
           </a>
         </div>
 
         <h3 class="platform-heading">&#128039; Linux</h3>
         <div class="download-options">
-          <a href="https://github.com/m4cd4r4/PortPilot/releases/download/v3.1.0/PortPilot-3.1.0-x86_64.AppImage" class="download-card" rel="noopener">
+          <a href="https://github.com/m4cd4r4/PortPilot/releases/download/v3.2.0/PortPilot-3.2.0-x86_64.AppImage" class="download-card" rel="noopener">
             <div class="download-icon" aria-hidden="true">&#128039;</div>
             <div class="download-info">
               <h4>AppImage</h4>
@@ -531,7 +543,7 @@
             </div>
             <span class="download-size">~98 MB</span>
           </a>
-          <a href="https://github.com/m4cd4r4/PortPilot/releases/download/v3.1.0/PortPilot-3.1.0-amd64.deb" class="download-card" rel="noopener">
+          <a href="https://github.com/m4cd4r4/PortPilot/releases/download/v3.2.0/PortPilot-3.2.0-amd64.deb" class="download-card" rel="noopener">
             <div class="download-icon" aria-hidden="true">&#128230;</div>
             <div class="download-info">
               <h4>.deb</h4>
