@@ -27,8 +27,9 @@ try {
   runtimeCatalogModule = require('../src/main/runtimeCatalog.js');
   configPathModule = require('../src/core/configPath.js');
 } catch {
-  runtimeCatalogModule = require('./src/main/runtimeCatalog.js');
-  configPathModule = require('./src/core/configPath.js');
+  const packagedSourceRoot = path.join(process.resourcesPath, 'app.asar', 'src');
+  runtimeCatalogModule = require(path.join(packagedSourceRoot, 'main', 'runtimeCatalog.js'));
+  configPathModule = require(path.join(packagedSourceRoot, 'core', 'configPath.js'));
 }
 const { scanRuntimeCatalog } = runtimeCatalogModule;
 const { getConfigPath } = configPathModule;

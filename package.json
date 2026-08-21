@@ -23,7 +23,8 @@
     "_comment_legacy_tests": "v1.3/v1.7/groups specs target the pre-v2.0 tab UI and need rewriting before re-enabling",
     "screenshots": "node take-screenshots.js",
     "build": "electron-builder --win",
-    "build:mac": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg --publish never",
+    "build:mac": "electron-builder --mac dmg --publish never",
+    "build:mac:unsigned": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg --publish never -c.mac.identity=null -c.mac.forceCodeSigning=false",
     "build:linux": "electron-builder --linux",
     "build:portable": "electron-builder --win portable",
     "build:all": "electron-builder --win nsis portable",
@@ -42,7 +43,7 @@
   },
   "devDependencies": {
     "electron": "^43.4.1",
-    "electron-builder": "^26.0.12",
+    "electron-builder": "^26.15.3",
     "playwright": "^1.57.0",
     "png-to-ico": "^3.0.1"
   },
@@ -67,30 +68,6 @@
       {
         "from": "mcp-server/package.json",
         "to": "mcp-server/package.json"
-      },
-      {
-        "from": "mcp-server/src/package.json",
-        "to": "mcp-server/src/package.json"
-      },
-      {
-        "from": "src/core/dockerRuntime.js",
-        "to": "mcp-server/src/core/dockerRuntime.js"
-      },
-      {
-        "from": "src/core/hostRuntime.js",
-        "to": "mcp-server/src/core/hostRuntime.js"
-      },
-      {
-        "from": "src/core/configPath.js",
-        "to": "mcp-server/src/core/configPath.js"
-      },
-      {
-        "from": "src/main/portScanner.js",
-        "to": "mcp-server/src/main/portScanner.js"
-      },
-      {
-        "from": "src/main/runtimeCatalog.js",
-        "to": "mcp-server/src/main/runtimeCatalog.js"
       },
       {
         "from": "mcp-server/node_modules",
@@ -129,7 +106,8 @@
     "mac": {
       "icon": "public/icon-512.png",
       "category": "public.app-category.developer-tools",
-      "identity": null,
+      "type": "distribution",
+      "forceCodeSigning": true,
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "linux": {

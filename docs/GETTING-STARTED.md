@@ -37,7 +37,8 @@ Development mode stores its configuration under a separate `portpilot-dev` direc
 ### Production Builds
 
 ```bash
-npm run build:mac    # unsigned macOS DMG
+npm run build:mac             # Developer ID-signed macOS DMG when a signing identity is installed
+npm run build:mac:unsigned    # local unsigned macOS DMG
 npm run build:linux  # AppImage + deb
 npm run build        # Windows NSIS + portable targets
 ```

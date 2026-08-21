@@ -15,10 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Electron 43 runtime** - replaces end-of-life Electron 27 and its fragile postinstall binary download with Electron's supported on-demand installer. Development and release builds now require Node.js 22.12 or newer; CI uses Node 24 LTS and reproducible `npm ci` installs.
 - **Isolated development runtime** - `npm run dev` now uses a separate `portpilot-dev` profile and MCP port `8789`, allowing it to run beside the installed app without sharing in-memory process state or colliding with production MCP on `8788`.
-- **macOS production build** - `npm run build:mac` creates an unsigned DMG without inspecting signing identities or publishing artifacts.
+- **macOS production build** - `npm run build:mac` uses an installed Developer ID identity; `npm run build:mac:unsigned` remains available for explicit local unsigned builds. Neither command publishes artifacts.
+- **Electron Builder 26.15** - updates the packager for Electron 43 signing compatibility and removes the previous dependency audit findings.
 
 ### Fixed
-- **Packaged MCP startup** - shared runtime modules now retain their CommonJS module boundary inside the ESM MCP package, so the installed app can start its HTTP MCP server.
+- **Packaged MCP startup** - the installed MCP server loads shared CommonJS runtime modules from the app ASAR, avoiding duplicate packaging that removed those files from the desktop bundle.
 - **MCP availability during desktop startup** - the HTTP MCP child now starts immediately after the single-instance lock, independently of optional window and tray initialization.
 
 ## [3.3.0] - 2026-07-01
