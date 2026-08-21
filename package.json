@@ -69,6 +69,10 @@
         "to": "mcp-server/package.json"
       },
       {
+        "from": "mcp-server/src/package.json",
+        "to": "mcp-server/src/package.json"
+      },
+      {
         "from": "src/core/dockerRuntime.js",
         "to": "mcp-server/src/core/dockerRuntime.js"
       },
