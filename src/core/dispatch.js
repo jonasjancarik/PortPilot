@@ -44,7 +44,10 @@ function createDispatcher(configStore) {
       if (!Number.isInteger(safePort) || safePort < 1 || safePort > 65535) return { success: false, error: 'Invalid port' };
       return { success: true, details: await getProcessDetails(safePid, safePort) };
     },
-    'runtime:scan': async () => ({ success: true, catalog: await scanRuntimeCatalog(configStore.getApps()) }),
+    'runtime:scan': async () => ({
+      success: true,
+      catalog: await scanRuntimeCatalog(configStore.getApps(), { managedApps: getRunningApps() }),
+    }),
 
     // ---- Processes ----
     'process:kill': async (pid) => killProcess(pid),

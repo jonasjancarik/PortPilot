@@ -15,18 +15,19 @@ import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import fs from 'fs';
 import path from 'path';
-import { execSync, exec, execFileSync } from 'child_process';
+import { execSync, exec } from 'child_process';
 import os from 'os';
 import { pathToFileURL } from 'url';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-let dockerRuntime;
+let runtimeCatalogModule;
 try {
-  dockerRuntime = require('../src/core/dockerRuntime.js');
+  runtimeCatalogModule = require('../src/main/runtimeCatalog.js');
 } catch {
-  dockerRuntime = require('./dockerRuntime.js');
+  runtimeCatalogModule = require('./src/main/runtimeCatalog.js');
 }
+const { scanRuntimeCatalog } = runtimeCatalogModule;
 
 // =============================================================================
 // CONFIG
@@ -69,31 +70,6 @@ function writeConfig(config) {
 
 function generateId() {
   return `app_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-}
-
-function scanDockerRuntimes(apps = []) {
-  try {
-    const rawIds = execFileSync('docker', ['container', 'ls', '--all', '--quiet', '--no-trunc'], {
-      encoding: 'utf8', timeout: 5000, maxBuffer: 8 * 1024 * 1024,
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    const ids = rawIds.split(/\r?\n/).map(id => id.trim()).filter(id => /^[a-f0-9]{12,64}$/i.test(id));
-    const inspect = ids.length === 0 ? [] : JSON.parse(execFileSync('docker', ['container', 'inspect', ...ids], {
-      encoding: 'utf8', timeout: 10000, maxBuffer: 32 * 1024 * 1024,
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }));
-    const projects = dockerRuntime.buildDockerProjects(inspect, apps);
-    return {
-      available: true,
-      projects,
-      projectCount: projects.length,
-      containerCount: projects.reduce((count, project) => count + project.services.length, 0),
-      runningContainerCount: projects.reduce((count, project) => count + project.runningServices, 0),
-      hostPorts: dockerRuntime.dockerHostPorts(projects),
-    };
-  } catch (error) {
-    return { available: false, error: error.message, projects: [], projectCount: 0, containerCount: 0, runningContainerCount: 0, hostPorts: [] };
-  }
 }
 
 // =============================================================================
@@ -516,7 +492,7 @@ function createServer() {
       const ports = scanPorts();
       const apps = config.apps || [];
       const running = computeRunning(apps, ports);
-      const docker = scanDockerRuntimes(apps);
+      const catalog = await scanRuntimeCatalog(apps, { hostPorts: ports });
       return {
         content: [{
           type: 'text',
@@ -526,10 +502,14 @@ function createServer() {
             activePorts: ports.length,
             favorites: apps.filter(a => a.isFavorite).length,
             groups: (config.groups || []).length,
-            dockerAvailable: docker.available,
-            dockerProjects: docker.projectCount,
-            containers: docker.containerCount,
-            runningContainers: docker.runningContainerCount
+            runtimeProjects: catalog.projectCount,
+            runtimeServices: catalog.serviceCount,
+            runningRuntimeServices: catalog.runningServiceCount,
+            hostProcesses: catalog.host.processCount,
+            dockerAvailable: catalog.docker.available,
+            dockerProjects: catalog.docker.projectCount,
+            containers: catalog.docker.containerCount,
+            runningContainers: catalog.docker.runningContainerCount
           }, null, 2)
         }]
       };
@@ -538,24 +518,53 @@ function createServer() {
 
   server.tool(
     'list_runtimes',
-    'List Docker containers and Compose services from the live Docker Engine. Includes stopped and internal-only services, health, project working directories, and host/container port mappings.',
+    'List the authoritative local runtime catalogue: host listener processes plus Docker containers and Compose services, unified by project working directory.',
     {
-      running_only: z.boolean().optional().describe('Only include running containers'),
-      project: z.string().optional().describe('Filter by Compose project or standalone container name')
+      running_only: z.boolean().optional().describe('Only include running host and Docker services'),
+      project: z.string().optional().describe('Filter by registered app, Compose project, or uncatalogued host group'),
+      source: z.enum(['host', 'docker']).optional().describe('Only include host processes or Docker services')
     },
-    async ({ running_only, project }) => {
+    async ({ running_only, project, source }) => {
       const config = readConfig();
-      const docker = scanDockerRuntimes(config.apps || []);
-      if (!docker.available) {
-        return { content: [{ type: 'text', text: JSON.stringify(docker, null, 2) }], isError: true };
-      }
-      let projects = docker.projects;
+      const catalog = await scanRuntimeCatalog(config.apps || []);
+      let projects = catalog.projects;
       if (project) projects = projects.filter(item => item.name.toLowerCase() === project.toLowerCase());
-      if (running_only) {
-        projects = projects.map(item => ({ ...item, services: item.services.filter(service => service.running) }))
-          .filter(item => item.services.length > 0);
-      }
-      return { content: [{ type: 'text', text: JSON.stringify({ ...docker, projects }, null, 2) }] };
+      projects = projects.map(item => ({
+        ...item,
+        services: item.services.filter(service =>
+          (!running_only || service.running) && (!source || service.sourceKind === source)),
+      })).filter(item => item.services.length > 0).map(item => ({
+        ...item,
+        runningServices: item.services.filter(service => service.running).length,
+        totalServices: item.services.length,
+      }));
+      const serviceCount = projects.reduce((count, item) => count + item.services.length, 0);
+      const runningServiceCount = projects.reduce((count, item) => count + item.runningServices, 0);
+      const result = {
+        scannedAt: catalog.scannedAt,
+        filters: { runningOnly: running_only === true, project: project || null, source: source || null },
+        projectCount: projects.length,
+        serviceCount,
+        runningServiceCount,
+        sources: {
+          host: {
+            available: catalog.host.available,
+            error: catalog.host.error,
+            totalProjects: catalog.host.projectCount,
+            totalProcesses: catalog.host.processCount,
+            runningProcesses: catalog.host.runningProcessCount,
+          },
+          docker: {
+            available: catalog.docker.available,
+            error: catalog.docker.error,
+            totalProjects: catalog.docker.projectCount,
+            totalContainers: catalog.docker.containerCount,
+            runningContainers: catalog.docker.runningContainerCount,
+          },
+        },
+        projects,
+      };
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
   );
 

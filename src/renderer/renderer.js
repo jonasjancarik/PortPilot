@@ -50,6 +50,7 @@ const state = {
   theme: 'tokyonight',
   dockerRunning: false,
   runtimeCatalog: null,
+  runtimeFilter: 'running',
   favoritesExpanded: true,
   otherProjectsExpanded: true,
   deleteAppId: null,
@@ -258,6 +259,7 @@ function setupDelegation() {
     openProcessFolder: el => openProcessFolder(el.dataset.path),
     copyPort: el => copyPort(+el.dataset.port),
     copyRuntimePort: el => copyRuntimePort(+el.dataset.port),
+    setRuntimeFilter: el => setRuntimeFilter(el.dataset.filter),
     killPort: el => killPort(+el.dataset.port),
     adoptPort: el => adoptPort(+el.dataset.port),
     toggleSection: el => toggleSection(el.dataset.section),
@@ -548,55 +550,90 @@ function renderRuntimeCatalog() {
   const section = document.getElementById('runtime-section');
   const count = document.getElementById('runtime-count');
   const docker = state.runtimeCatalog?.docker;
-  if (!docker?.available) {
+  const host = state.runtimeCatalog?.host;
+  const catalogAvailable = docker?.available || host?.available;
+  if (!catalogAvailable) {
     section.classList.add('hidden');
     return;
   }
 
   section.classList.remove('hidden');
-  count.textContent = `${docker.runningContainerCount}/${docker.containerCount} running`;
-  let projects = docker.projects || [];
+  const totalServices = state.runtimeCatalog?.serviceCount ??
+    ((docker?.containerCount || 0) + (host?.processCount || 0));
+  const runningServices = state.runtimeCatalog?.runningServiceCount ??
+    ((docker?.runningContainerCount || 0) + (host?.runningProcessCount || 0));
+  count.textContent = `${runningServices}/${totalServices} running`;
+  let projects = state.runtimeCatalog?.projects || docker?.projects || [];
   if (state.globalSearch) {
     const q = state.globalSearch.toLowerCase();
     projects = projects.map((project) => ({
       ...project,
       services: project.services.filter((service) =>
-        `${project.name} ${project.workingDir || ''} ${service.name} ${service.compose?.service || ''} ${service.image || ''}`.toLowerCase().includes(q)),
+        `${project.name} ${project.workingDir || ''} ${service.name || ''} ${service.processName || ''} ${service.compose?.service || ''} ${service.image || ''} ${service.commandLine || ''}`.toLowerCase().includes(q)),
+    })).filter((project) => project.services.length > 0);
+  }
+  if (state.runtimeFilter !== 'all') {
+    const shouldRun = state.runtimeFilter === 'running';
+    projects = projects.map((project) => ({
+      ...project,
+      services: project.services.filter((service) => service.running === shouldRun),
     })).filter((project) => project.services.length > 0);
   }
 
   if (projects.length === 0) {
     dom.runtimeList.innerHTML = `<div class="empty-state">${
-      state.globalSearch ? `No Docker workloads match "${escapeHtml(state.globalSearch)}"` : 'Docker is running, but it has no containers.'
+      state.globalSearch
+        ? `No runtime services match "${escapeHtml(state.globalSearch)}"`
+        : `No ${state.runtimeFilter === 'all' ? '' : state.runtimeFilter + ' '}runtime services found.`
     }</div>`;
     return;
   }
   dom.runtimeList.innerHTML = projects.map(renderRuntimeProject).join('');
 }
 
+function setRuntimeFilter(filter) {
+  if (!['running', 'stopped', 'all'].includes(filter)) return;
+  state.runtimeFilter = filter;
+  document.querySelectorAll('.runtime-filter').forEach((button) => {
+    button.classList.toggle('active', button.dataset.filter === filter);
+  });
+  renderRuntimeCatalog();
+}
+
 function renderRuntimeProject(project) {
   const linked = (project.registeredAppIds || []).length > 0;
+  const sourceKinds = project.sourceKinds || [...new Set(project.services.map((service) => service.sourceKind || service.source || 'docker'))];
+  const sourceLabel = sourceKinds.includes('host') && sourceKinds.includes('docker')
+    ? 'Host + Docker'
+    : (sourceKinds.includes('host') ? 'Host processes' : 'Docker');
+  const running = project.services.filter((service) => service.running).length;
   return `<article class="runtime-project">
     <header class="runtime-project-header">
-      <span class="runtime-project-icon">${icon('docker', 16)}</span>
+      <span class="runtime-project-icon" title="${sourceLabel}">${icon(sourceKinds.length === 1 && sourceKinds[0] === 'docker' ? 'docker' : 'plug', 16)}</span>
       <div class="runtime-project-title">
         <strong>${escapeHtml(project.name)}</strong>
-        ${project.workingDir ? `<span title="${escapeHtml(project.workingDir)}">${escapeHtml(project.workingDir)}</span>` : '<span>Standalone container</span>'}
+        ${project.workingDir ? `<span title="${escapeHtml(project.workingDir)}">${escapeHtml(project.workingDir)}</span>` : '<span>No project folder detected</span>'}
       </div>
+      <span class="runtime-kind">${sourceLabel}</span>
       ${linked ? '<span class="runtime-linked">Linked to a registered app</span>' : ''}
-      <span class="runtime-project-count">${project.runningServices}/${project.totalServices} running</span>
+      <span class="runtime-project-count">${runtimeProjectCount(project.services, running)}</span>
     </header>
     <div class="runtime-services">${project.services.map(renderRuntimeService).join('')}</div>
   </article>`;
 }
 
 function renderRuntimeService(service) {
-  const serviceName = service.compose?.service || service.name;
-  const statusLabel = service.running && service.health ? service.health : service.status;
+  const source = service.sourceKind || service.source || 'docker';
+  const serviceName = service.compose?.service || service.processName || service.name;
+  const statusLabel = service.running && service.health ? service.health : (service.status || (service.running ? 'running' : 'stopped'));
   const statusClass = service.running ? (service.health === 'unhealthy' ? 'error' : 'running') : 'stopped';
-  const portMarkup = service.ports.length === 0
+  const portMarkup = (service.ports || []).length === 0
     ? '<span class="runtime-no-ports">No network ports</span>'
-    : service.ports.map((mapping) => {
+    : source === 'host'
+      ? service.ports.map((item) => Number(typeof item === 'object' ? (item.port ?? item.hostPort) : item))
+        .filter(Number.isInteger)
+        .map((port) => `<button class="runtime-port published" data-act="copyRuntimePort" data-port="${port}" title="Copy localhost:${port}">localhost:${port}</button>`).join('')
+      : service.ports.map((mapping) => {
       if (mapping.published.length === 0) {
         return `<span class="runtime-port internal" title="Available only to other containers">Internal only · ${mapping.containerPort}/${mapping.protocol}</span>`;
       }
@@ -605,15 +642,37 @@ function renderRuntimeService(service) {
       return uniquePublished.map((published) =>
         `<button class="runtime-port published" data-act="copyRuntimePort" data-port="${published.hostPort}" title="Copy localhost:${published.hostPort}">localhost:${published.hostPort} → ${mapping.containerPort}/${mapping.protocol}</button>`
       ).join('');
-    }).join('');
+      }).join('');
+
+  const detail = service.image || service.commandLine || (source === 'host' ? 'Host process' : 'Unknown image');
+  const statusDetail = source === 'host' && service.pid ? `PID ${service.pid} · ${statusLabel}` : statusLabel;
+  const firstHostPort = source === 'host' ? Number(service.ports?.[0]) : null;
+  const hostGroup = firstHostPort ? window.PortPilotStatus.classify({
+    port: firstHostPort,
+    processName: service.processName,
+    commandLine: service.commandLine,
+    pid: service.pid,
+  }) : null;
+  const hostActions = firstHostPort && hostGroup !== 'system' ? `
+    <span class="runtime-host-actions">
+      <button class="btn btn-small btn-secondary" data-act="openPortInBrowser" data-port="${firstHostPort}" title="Open localhost:${firstHostPort}">${icon('browser', 11)}</button>
+      <button class="btn btn-small btn-secondary" data-act="adoptPort" data-port="${firstHostPort}" title="Register this process as an app">${icon('plus', 11)}</button>
+      <button class="btn btn-small btn-danger" data-act="killPort" data-port="${firstHostPort}" title="Kill this process">${icon('kill', 11)}</button>
+    </span>` : '';
 
   return `<div class="runtime-service">
     <span class="status-dot ${statusClass}" title="${escapeHtml(statusLabel)}"></span>
-    <span class="runtime-service-name" title="${escapeHtml(service.name)}">${escapeHtml(serviceName)}</span>
-    <span class="runtime-service-image" title="${escapeHtml(service.image)}">${escapeHtml(service.image || 'Unknown image')}</span>
+    <span class="runtime-service-name" title="${escapeHtml(service.name || service.processName)}">${escapeHtml(serviceName)}</span>
+    <span class="runtime-service-image" title="${escapeHtml(detail)}">${escapeHtml(detail)}</span>
     <span class="runtime-service-ports">${portMarkup}</span>
-    <span class="runtime-service-status">${escapeHtml(statusLabel)}</span>
+    <span class="runtime-service-status"><span>${escapeHtml(statusDetail)}</span>${hostActions}</span>
   </div>`;
+}
+
+function runtimeProjectCount(services, running) {
+  if (state.runtimeFilter === 'running') return `${services.length} running`;
+  if (state.runtimeFilter === 'stopped') return `${services.length} stopped`;
+  return `${running}/${services.length} running`;
 }
 
 function copyRuntimePort(port) {
@@ -635,6 +694,7 @@ function renderPorts() {
   // Published Docker ports have richer service/project context in the runtime
   // catalogue, so do not repeat their host proxy listeners as unknown ports.
   for (const port of state.runtimeCatalog?.docker?.hostPorts || []) matchedPorts.add(port);
+  for (const port of state.runtimeCatalog?.host?.hostPorts || []) matchedPorts.add(port);
   let ports = state.ports.filter(p => !matchedPorts.has(p.port));
 
   if (state.globalSearch) {

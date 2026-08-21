@@ -518,6 +518,27 @@ body {
   color: var(--text-muted);
   font-size: 0.7rem;
 }
+.runtime-filters {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--bg-tertiary);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-sm);
+}
+.runtime-filter {
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 1px);
+  padding: 2px 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.66rem;
+  cursor: pointer;
+}
+.runtime-filter.active {
+  background: var(--accent-cyan);
+  color: var(--bg-primary);
+}
 .runtime-list,
 .runtime-services {
   display: flex;
@@ -560,14 +581,24 @@ body {
   white-space: nowrap;
 }
 .runtime-linked,
+.runtime-kind,
 .runtime-project-count,
 .runtime-service-status {
   color: var(--text-secondary);
   font-size: 0.66rem;
   white-space: nowrap;
 }
+.runtime-service-status,
+.runtime-host-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 .runtime-linked {
   color: var(--accent-cyan);
+}
+.runtime-kind {
+  color: var(--text-muted);
 }
 .runtime-service {
   display: grid;

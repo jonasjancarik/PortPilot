@@ -59,10 +59,15 @@
       <section id="runtime-section" class="section hidden">
         <div class="section-toolbar runtime-toolbar">
           <div class="toolbar-left">
-            <span class="section-label">Docker Workloads</span>
-            <span class="runtime-source">Discovered from Docker</span>
+            <span class="section-label">Runtime Catalogue</span>
+            <span class="runtime-source">Discovered from your computer and Docker</span>
+            <div class="runtime-filters" role="group" aria-label="Filter runtime services">
+              <button type="button" class="runtime-filter active" data-act="setRuntimeFilter" data-filter="running">Running</button>
+              <button type="button" class="runtime-filter" data-act="setRuntimeFilter" data-filter="stopped">Stopped</button>
+              <button type="button" class="runtime-filter" data-act="setRuntimeFilter" data-filter="all">All</button>
+            </div>
           </div>
-          <span id="runtime-count" class="count-badge">0 containers</span>
+          <span id="runtime-count" class="count-badge">0 services</span>
         </div>
         <div id="runtime-list" class="runtime-list"></div>
       </section>

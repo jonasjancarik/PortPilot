@@ -84,7 +84,10 @@ function buildDockerProjects(inspectPayload, apps = []) {
   const projects = new Map();
 
   for (const container of containers) {
-    const key = container.compose ? `compose:${container.compose.project}` : `container:${container.id}`;
+    const composeIdentity = container.compose
+      ? `${container.compose.project}:${normalizePath(container.compose.workingDir) || 'no-cwd'}`
+      : null;
+    const key = container.compose ? `compose:${composeIdentity}` : `container:${container.id}`;
     if (!projects.has(key)) {
       const workingDir = container.compose?.workingDir || null;
       projects.set(key, {

@@ -19,7 +19,7 @@
     "agent": "node src/agent/server.js",
     "test": "node tests/run-comprehensive.js",
     "test:all": "node tests/run-comprehensive.js",
-    "test:unit": "node tests/run-unit.js",
+    "test:unit": "node tests/run-unit.js && node tests/host-runtime.test.cjs",
     "_comment_legacy_tests": "v1.3/v1.7/groups specs target the pre-v2.0 tab UI and need rewriting before re-enabling",
     "screenshots": "node take-screenshots.js",
     "build": "electron-builder --win",
@@ -66,7 +66,19 @@
       },
       {
         "from": "src/core/dockerRuntime.js",
-        "to": "mcp-server/dockerRuntime.js"
+        "to": "mcp-server/src/core/dockerRuntime.js"
+      },
+      {
+        "from": "src/core/hostRuntime.js",
+        "to": "mcp-server/src/core/hostRuntime.js"
+      },
+      {
+        "from": "src/main/portScanner.js",
+        "to": "mcp-server/src/main/portScanner.js"
+      },
+      {
+        "from": "src/main/runtimeCatalog.js",
+        "to": "mcp-server/src/main/runtimeCatalog.js"
       },
       {
         "from": "mcp-server/node_modules",

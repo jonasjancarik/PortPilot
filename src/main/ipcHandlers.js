@@ -417,7 +417,10 @@ function setupIpcHandlers(ipcMain, configStore) {
   /** Discover Docker containers and group Compose services by project. */
   ipcMain.handle('runtime:scan', async () => {
     try {
-      return { success: true, catalog: await scanRuntimeCatalog(configStore.getApps()) };
+      return {
+        success: true,
+        catalog: await scanRuntimeCatalog(configStore.getApps(), { managedApps: getRunningApps() }),
+      };
     } catch (error) {
       return { success: false, error: error.message };
     }

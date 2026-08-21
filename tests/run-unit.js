@@ -175,6 +175,15 @@ t('reports only published host ports', () => {
   assert.deepStrictEqual(dockerHostPorts(buildDockerProjects([composeInspect, internalInspect])), [55432]);
 });
 
+t('keeps identical Compose project names in different working directories separate', () => {
+  const second = JSON.parse(JSON.stringify(composeInspect));
+  second.Id = 'c'.repeat(64);
+  second.Name = '/other-db-1';
+  second.Config.Labels['com.docker.compose.project.working_dir'] = '/work/other';
+  const projects = buildDockerProjects([composeInspect, second]);
+  assert.strictEqual(projects.length, 2);
+});
+
 // ---- summary --------------------------------------------------------------
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

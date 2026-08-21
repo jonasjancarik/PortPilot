@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Live Docker and Compose runtime catalogue** - queries Docker Engine state, groups services by Compose project labels, shows stopped and internal-only containers, health, project working directories, and published host/container port mappings in both desktop and browser UIs.
-- **`list_runtimes` MCP tool** - gives agents the same Docker-sourced inventory and links Compose projects to registered apps by working directory.
+- **`list_runtimes` MCP tool** - gives agents the same live host and Docker inventory and links Compose projects to registered apps by working directory.
+- **Unified host runtime discovery** - groups listening host processes by PID and project, merges them with Compose projects that share a working directory, and provides running/stopped plus host/Docker filters.
 
 ## [3.3.0] - 2026-07-01
 
