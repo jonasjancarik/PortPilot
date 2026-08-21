@@ -1,0 +1,28 @@
+version = 1
+name = "PortPilot"
+
+[setup]
+script = "npm ci"
+
+[[actions]]
+name = "Run dev"
+icon = "run"
+command = "npm run dev"
+
+[[actions]]
+name = "Build production"
+icon = "tool"
+command = "CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac --publish never"
+platform = "darwin"
+
+[[actions]]
+name = "Build production"
+icon = "tool"
+command = "npm run build:linux"
+platform = "linux"
+
+[[actions]]
+name = "Build production"
+icon = "tool"
+command = "npm run build"
+platform = "win32"
