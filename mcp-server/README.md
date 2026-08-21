@@ -8,6 +8,7 @@ Claude can now:
 - **List apps** registered in PortPilot
 - **Start/stop apps** by name or ID (individually or in bulk)
 - **Scan ports** to see what's running
+- **Catalogue Docker/Compose workloads** directly from the live Docker Engine
 - **Add new apps** directly to PortPilot
 - **Register git worktrees / branches** so they nest under the parent project and run on their own port alongside it
 - **Kill processes** by port number
@@ -66,6 +67,7 @@ If prompted for permissions, add to `~/.claude/settings.json`:
 | `list_apps` | List all registered apps |
 | `get_app` | Get details of a specific app |
 | `list_running` | List currently running apps with ports |
+| `list_runtimes` | List Docker containers and Compose services with health and port mappings |
 | `scan_ports` | Scan for active ports on the system |
 | `check_port` | Check whether a specific port is in use |
 | `start_app` | Start an app by ID or name |

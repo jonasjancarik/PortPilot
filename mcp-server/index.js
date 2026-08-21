@@ -15,9 +15,18 @@ import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import fs from 'fs';
 import path from 'path';
-import { execSync, exec } from 'child_process';
+import { execSync, exec, execFileSync } from 'child_process';
 import os from 'os';
 import { pathToFileURL } from 'url';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+let dockerRuntime;
+try {
+  dockerRuntime = require('../src/core/dockerRuntime.js');
+} catch {
+  dockerRuntime = require('./dockerRuntime.js');
+}
 
 // =============================================================================
 // CONFIG
@@ -60,6 +69,31 @@ function writeConfig(config) {
 
 function generateId() {
   return `app_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+}
+
+function scanDockerRuntimes(apps = []) {
+  try {
+    const rawIds = execFileSync('docker', ['container', 'ls', '--all', '--quiet', '--no-trunc'], {
+      encoding: 'utf8', timeout: 5000, maxBuffer: 8 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    const ids = rawIds.split(/\r?\n/).map(id => id.trim()).filter(id => /^[a-f0-9]{12,64}$/i.test(id));
+    const inspect = ids.length === 0 ? [] : JSON.parse(execFileSync('docker', ['container', 'inspect', ...ids], {
+      encoding: 'utf8', timeout: 10000, maxBuffer: 32 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }));
+    const projects = dockerRuntime.buildDockerProjects(inspect, apps);
+    return {
+      available: true,
+      projects,
+      projectCount: projects.length,
+      containerCount: projects.reduce((count, project) => count + project.services.length, 0),
+      runningContainerCount: projects.reduce((count, project) => count + project.runningServices, 0),
+      hostPorts: dockerRuntime.dockerHostPorts(projects),
+    };
+  } catch (error) {
+    return { available: false, error: error.message, projects: [], projectCount: 0, containerCount: 0, runningContainerCount: 0, hostPorts: [] };
+  }
 }
 
 // =============================================================================
@@ -475,13 +509,14 @@ function createServer() {
 
   server.tool(
     'get_status',
-    'Get a quick summary: how many apps registered, how many running, how many ports active',
+    'Get a quick summary of registered apps, active ports, and Docker workloads',
     {},
     async () => {
       const config = readConfig();
       const ports = scanPorts();
       const apps = config.apps || [];
       const running = computeRunning(apps, ports);
+      const docker = scanDockerRuntimes(apps);
       return {
         content: [{
           type: 'text',
@@ -490,10 +525,37 @@ function createServer() {
             runningApps: running.size,
             activePorts: ports.length,
             favorites: apps.filter(a => a.isFavorite).length,
-            groups: (config.groups || []).length
+            groups: (config.groups || []).length,
+            dockerAvailable: docker.available,
+            dockerProjects: docker.projectCount,
+            containers: docker.containerCount,
+            runningContainers: docker.runningContainerCount
           }, null, 2)
         }]
       };
+    }
+  );
+
+  server.tool(
+    'list_runtimes',
+    'List Docker containers and Compose services from the live Docker Engine. Includes stopped and internal-only services, health, project working directories, and host/container port mappings.',
+    {
+      running_only: z.boolean().optional().describe('Only include running containers'),
+      project: z.string().optional().describe('Filter by Compose project or standalone container name')
+    },
+    async ({ running_only, project }) => {
+      const config = readConfig();
+      const docker = scanDockerRuntimes(config.apps || []);
+      if (!docker.available) {
+        return { content: [{ type: 'text', text: JSON.stringify(docker, null, 2) }], isError: true };
+      }
+      let projects = docker.projects;
+      if (project) projects = projects.filter(item => item.name.toLowerCase() === project.toLowerCase());
+      if (running_only) {
+        projects = projects.map(item => ({ ...item, services: item.services.filter(service => service.running) }))
+          .filter(item => item.services.length > 0);
+      }
+      return { content: [{ type: 'text', text: JSON.stringify({ ...docker, projects }, null, 2) }] };
     }
   );
 

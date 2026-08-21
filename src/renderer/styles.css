@@ -510,6 +510,117 @@ body {
   font-size: 0.7rem;
 }
 
+/* ============ Docker runtime catalogue ============ */
+.runtime-toolbar {
+  align-items: center;
+}
+.runtime-source {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+.runtime-list,
+.runtime-services {
+  display: flex;
+  flex-direction: column;
+}
+.runtime-list {
+  gap: 8px;
+}
+.runtime-project {
+  background: var(--card-bg);
+  border: var(--border-width) solid var(--card-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.runtime-project-header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-bottom: var(--border-width) solid var(--card-border);
+}
+.runtime-project-icon {
+  color: var(--accent-cyan);
+  display: inline-flex;
+}
+.runtime-project-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.runtime-project-title strong {
+  font-size: 0.82rem;
+}
+.runtime-project-title span {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.runtime-linked,
+.runtime-project-count,
+.runtime-service-status {
+  color: var(--text-secondary);
+  font-size: 0.66rem;
+  white-space: nowrap;
+}
+.runtime-linked {
+  color: var(--accent-cyan);
+}
+.runtime-service {
+  display: grid;
+  grid-template-columns: 14px minmax(100px, 160px) minmax(110px, 180px) 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+}
+.runtime-service + .runtime-service {
+  border-top: var(--border-width) solid var(--card-border);
+}
+.runtime-service-name,
+.runtime-service-image {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.runtime-service-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.runtime-service-image {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+.runtime-service-ports {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.runtime-port,
+.runtime-no-ports {
+  border: 0;
+  border-radius: var(--radius-sm);
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.65rem;
+  padding: 2px 5px;
+}
+.runtime-port.published {
+  background: var(--bg-tertiary);
+  color: var(--accent-cyan);
+  cursor: pointer;
+}
+.runtime-port.published:hover {
+  text-decoration: underline;
+}
+.runtime-port.internal,
+.runtime-no-ports {
+  background: transparent;
+  color: var(--text-muted);
+  padding-left: 0;
+}
+
 /* ============ Ports Grid ============ */
 .ports-grid {
   display: flex;

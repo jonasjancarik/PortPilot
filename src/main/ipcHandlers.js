@@ -7,6 +7,7 @@ const os = require('os');
 const { probe } = require('./healthCheck');
 const { shareInfo } = require('./shareInfo');
 const reserver = require('./portReserver');
+const { scanRuntimeCatalog } = require('./runtimeCatalog');
 
 // Read the Peacock window colour from a worktree's .vscode/settings.json so a
 // detected branch can be coloured to match its VS Code window. settings.json is
@@ -408,6 +409,15 @@ function setupIpcHandlers(ipcMain, configStore) {
       const apps = configStore.getApps();
       const { matches, unknownConflicts } = matchPortsToApps(ports, apps);
       return { success: true, ports, matches, unknownConflicts };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  /** Discover Docker containers and group Compose services by project. */
+  ipcMain.handle('runtime:scan', async () => {
+    try {
+      return { success: true, catalog: await scanRuntimeCatalog(configStore.getApps()) };
     } catch (error) {
       return { success: false, error: error.message };
     }

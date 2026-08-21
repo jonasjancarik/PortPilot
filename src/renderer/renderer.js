@@ -49,6 +49,7 @@ const state = {
   appSort: 'default',
   theme: 'tokyonight',
   dockerRunning: false,
+  runtimeCatalog: null,
   favoritesExpanded: true,
   otherProjectsExpanded: true,
   deleteAppId: null,
@@ -184,6 +185,7 @@ function pollDockerReady(attempts = 0) {
 const dom = {
   portsList: document.getElementById('ports-list'),
   appsList: document.getElementById('apps-list'),
+  runtimeList: document.getElementById('runtime-list'),
   portCount: document.getElementById('port-count'),
   portsSummary: document.getElementById('ports-summary'),
   modal: document.getElementById('modal-app'),
@@ -255,6 +257,7 @@ function setupDelegation() {
     openPortInBrowser: el => openPortInBrowser(+el.dataset.port),
     openProcessFolder: el => openProcessFolder(el.dataset.path),
     copyPort: el => copyPort(+el.dataset.port),
+    copyRuntimePort: el => copyRuntimePort(+el.dataset.port),
     killPort: el => killPort(+el.dataset.port),
     adoptPort: el => adoptPort(+el.dataset.port),
     toggleSection: el => toggleSection(el.dataset.section),
@@ -355,6 +358,7 @@ function setupEventListeners() {
     clearTimeout(searchDebounce);
     searchDebounce = setTimeout(() => {
       renderApps();
+      renderRuntimeCatalog();
       renderPorts();
     }, 150);
   });
@@ -516,6 +520,7 @@ async function scanPorts() {
     const result = await window.portpilot.ports.scan();
     if (result.success) {
       state.ports = result.ports.sort((a, b) => a.port - b.port);
+      await loadRuntimeCatalog();
       renderPorts();
       showToast(`Found ${state.ports.length} active ports`, 'success');
       fetchAllPortDetails();
@@ -529,6 +534,93 @@ async function scanPorts() {
   }
 }
 
+async function loadRuntimeCatalog() {
+  try {
+    const result = await window.portpilot.runtime.scan();
+    if (result.success) state.runtimeCatalog = result.catalog;
+  } catch {
+    state.runtimeCatalog = null;
+  }
+  renderRuntimeCatalog();
+}
+
+function renderRuntimeCatalog() {
+  const section = document.getElementById('runtime-section');
+  const count = document.getElementById('runtime-count');
+  const docker = state.runtimeCatalog?.docker;
+  if (!docker?.available) {
+    section.classList.add('hidden');
+    return;
+  }
+
+  section.classList.remove('hidden');
+  count.textContent = `${docker.runningContainerCount}/${docker.containerCount} running`;
+  let projects = docker.projects || [];
+  if (state.globalSearch) {
+    const q = state.globalSearch.toLowerCase();
+    projects = projects.map((project) => ({
+      ...project,
+      services: project.services.filter((service) =>
+        `${project.name} ${project.workingDir || ''} ${service.name} ${service.compose?.service || ''} ${service.image || ''}`.toLowerCase().includes(q)),
+    })).filter((project) => project.services.length > 0);
+  }
+
+  if (projects.length === 0) {
+    dom.runtimeList.innerHTML = `<div class="empty-state">${
+      state.globalSearch ? `No Docker workloads match "${escapeHtml(state.globalSearch)}"` : 'Docker is running, but it has no containers.'
+    }</div>`;
+    return;
+  }
+  dom.runtimeList.innerHTML = projects.map(renderRuntimeProject).join('');
+}
+
+function renderRuntimeProject(project) {
+  const linked = (project.registeredAppIds || []).length > 0;
+  return `<article class="runtime-project">
+    <header class="runtime-project-header">
+      <span class="runtime-project-icon">${icon('docker', 16)}</span>
+      <div class="runtime-project-title">
+        <strong>${escapeHtml(project.name)}</strong>
+        ${project.workingDir ? `<span title="${escapeHtml(project.workingDir)}">${escapeHtml(project.workingDir)}</span>` : '<span>Standalone container</span>'}
+      </div>
+      ${linked ? '<span class="runtime-linked">Linked to a registered app</span>' : ''}
+      <span class="runtime-project-count">${project.runningServices}/${project.totalServices} running</span>
+    </header>
+    <div class="runtime-services">${project.services.map(renderRuntimeService).join('')}</div>
+  </article>`;
+}
+
+function renderRuntimeService(service) {
+  const serviceName = service.compose?.service || service.name;
+  const statusLabel = service.running && service.health ? service.health : service.status;
+  const statusClass = service.running ? (service.health === 'unhealthy' ? 'error' : 'running') : 'stopped';
+  const portMarkup = service.ports.length === 0
+    ? '<span class="runtime-no-ports">No network ports</span>'
+    : service.ports.map((mapping) => {
+      if (mapping.published.length === 0) {
+        return `<span class="runtime-port internal" title="Available only to other containers">Internal only · ${mapping.containerPort}/${mapping.protocol}</span>`;
+      }
+      const uniquePublished = mapping.published.filter((published, index, all) =>
+        all.findIndex((candidate) => candidate.hostPort === published.hostPort) === index);
+      return uniquePublished.map((published) =>
+        `<button class="runtime-port published" data-act="copyRuntimePort" data-port="${published.hostPort}" title="Copy localhost:${published.hostPort}">localhost:${published.hostPort} → ${mapping.containerPort}/${mapping.protocol}</button>`
+      ).join('');
+    }).join('');
+
+  return `<div class="runtime-service">
+    <span class="status-dot ${statusClass}" title="${escapeHtml(statusLabel)}"></span>
+    <span class="runtime-service-name" title="${escapeHtml(service.name)}">${escapeHtml(serviceName)}</span>
+    <span class="runtime-service-image" title="${escapeHtml(service.image)}">${escapeHtml(service.image || 'Unknown image')}</span>
+    <span class="runtime-service-ports">${portMarkup}</span>
+    <span class="runtime-service-status">${escapeHtml(statusLabel)}</span>
+  </div>`;
+}
+
+function copyRuntimePort(port) {
+  navigator.clipboard.writeText(`http://localhost:${port}`);
+  showToast(`Copied http://localhost:${port}`, 'success');
+}
+
 function renderPorts() {
   const S = window.PortPilotStatus;
 
@@ -540,6 +632,9 @@ function renderPorts() {
   for (const detected of Object.values(state.detectedApps)) {
     if (detected && detected.port) matchedPorts.add(detected.port);
   }
+  // Published Docker ports have richer service/project context in the runtime
+  // catalogue, so do not repeat their host proxy listeners as unknown ports.
+  for (const port of state.runtimeCatalog?.docker?.hostPorts || []) matchedPorts.add(port);
   let ports = state.ports.filter(p => !matchedPorts.has(p.port));
 
   if (state.globalSearch) {
@@ -756,12 +851,13 @@ async function openInBrowser(appId) {
 // ============ App Operations ============
 async function loadApps() {
   try {
-    const [configResult, groupsResult, runningResult, scanResult, staleResult] = await Promise.all([
+    const [configResult, groupsResult, runningResult, scanResult, staleResult, runtimeResult] = await Promise.all([
       window.portpilot.config.getApps(),
       window.portpilot.config.getGroups(),
       window.portpilot.process.list(),
       window.portpilot.ports.scanWithApps(),
-      window.portpilot.worktrees.stale()
+      window.portpilot.worktrees.stale(),
+      window.portpilot.runtime.scan()
     ]);
 
     if (configResult.success) state.apps = configResult.apps;
@@ -776,8 +872,10 @@ async function loadApps() {
         showUnknownConflictWarnings(state.unknownConflicts);
       }
     }
+    if (runtimeResult.success) state.runtimeCatalog = runtimeResult.catalog;
 
     renderApps();
+    renderRuntimeCatalog();
     renderPorts();
     updateAppsCount();
     refreshHealth();

@@ -15,6 +15,10 @@ contextBridge.exposeInMainWorld('portpilot', {
     getDetails: (pid, port) => ipcRenderer.invoke('ports:getDetails', pid, port)
   },
 
+  runtime: {
+    scan: () => ipcRenderer.invoke('runtime:scan')
+  },
+
   // Process operations
   process: {
     kill: (pid) => ipcRenderer.invoke('process:kill', pid),

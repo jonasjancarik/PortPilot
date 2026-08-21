@@ -55,6 +55,18 @@
         </div>
       </section>
 
+      <!-- Docker is discovered from the Engine, including containers started outside PortPilot. -->
+      <section id="runtime-section" class="section hidden">
+        <div class="section-toolbar runtime-toolbar">
+          <div class="toolbar-left">
+            <span class="section-label">Docker Workloads</span>
+            <span class="runtime-source">Discovered from Docker</span>
+          </div>
+          <span id="runtime-count" class="count-badge">0 containers</span>
+        </div>
+        <div id="runtime-list" class="runtime-list"></div>
+      </section>
+
       <!-- Active Ports Section (grouped: dev / other / system) -->
       <section id="ports-section" class="section collapsible">
         <div class="section-header-bar" id="ports-section-toggle">

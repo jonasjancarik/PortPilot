@@ -50,6 +50,9 @@
       kill: (port) => call('ports:kill', port),
       getDetails: (pid, port) => call('ports:getDetails', pid, port)
     },
+    runtime: {
+      scan: () => call('runtime:scan')
+    },
     process: {
       kill: (pid) => call('process:kill', pid),
       start: (appConfig) => call('process:start', appConfig),

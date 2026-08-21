@@ -7,6 +7,7 @@
  */
 const assert = require('assert');
 const { classify, statusOf, STATES, GROUPS, GROUP_ORDER } = require('../src/core/status');
+const { buildDockerProjects, dockerHostPorts, normalizeContainer } = require('../src/core/dockerRuntime');
 
 let passed = 0;
 let failed = 0;
@@ -111,6 +112,67 @@ t('GROUP_ORDER covers every group and System is collapsed by default', () => {
   assert.deepStrictEqual([...GROUP_ORDER].sort(), Object.keys(GROUPS).sort());
   assert.strictEqual(GROUPS.system.defaultCollapsed, true);
   assert.strictEqual(GROUPS.dev.defaultCollapsed, false);
+});
+
+// ---- Docker runtime catalogue --------------------------------------------
+const composeInspect = {
+  Id: 'a'.repeat(64),
+  Name: '/example-db-1',
+  Created: '2026-08-21T10:00:00Z',
+  Config: {
+    Image: 'postgres:17',
+    Entrypoint: ['docker-entrypoint.sh'],
+    Cmd: ['postgres'],
+    ExposedPorts: { '5432/tcp': {} },
+    Labels: {
+      'com.docker.compose.project': 'example',
+      'com.docker.compose.service': 'db',
+      'com.docker.compose.project.working_dir': '/work/example',
+      'com.docker.compose.project.config_files': '/work/example/compose.yml',
+      'com.docker.compose.container-number': '1',
+    },
+  },
+  State: { Status: 'running', Running: true, Health: { Status: 'healthy' } },
+  NetworkSettings: {
+    Ports: { '5432/tcp': [{ HostIp: '127.0.0.1', HostPort: '55432' }] },
+    Networks: { example_default: {} },
+  },
+};
+
+const internalInspect = {
+  Id: 'b'.repeat(64),
+  Name: '/example-redis-1',
+  Config: {
+    Image: 'redis:8', Cmd: ['redis-server'], ExposedPorts: { '6379/tcp': {} },
+    Labels: {
+      'com.docker.compose.project': 'example',
+      'com.docker.compose.service': 'redis',
+      'com.docker.compose.project.working_dir': '/work/example',
+    },
+  },
+  State: { Status: 'exited', Running: false },
+  NetworkSettings: { Ports: { '6379/tcp': null }, Networks: { example_default: {} } },
+};
+
+t('normalizes Compose identity, health, and published port mappings', () => {
+  const service = normalizeContainer(composeInspect);
+  assert.strictEqual(service.compose.project, 'example');
+  assert.strictEqual(service.compose.service, 'db');
+  assert.strictEqual(service.health, 'healthy');
+  assert.deepStrictEqual(service.ports[0].published[0], { hostIp: '127.0.0.1', hostPort: 55432 });
+});
+
+t('groups Compose containers and keeps internal-only services visible', () => {
+  const projects = buildDockerProjects([composeInspect, internalInspect], [{ id: 'app-1', cwd: '/work/example' }]);
+  assert.strictEqual(projects.length, 1);
+  assert.strictEqual(projects[0].services.length, 2);
+  assert.strictEqual(projects[0].runningServices, 1);
+  assert.deepStrictEqual(projects[0].registeredAppIds, ['app-1']);
+  assert.deepStrictEqual(projects[0].services.find(service => service.compose.service === 'redis').ports[0].published, []);
+});
+
+t('reports only published host ports', () => {
+  assert.deepStrictEqual(dockerHostPorts(buildDockerProjects([composeInspect, internalInspect])), [55432]);
 });
 
 // ---- summary --------------------------------------------------------------

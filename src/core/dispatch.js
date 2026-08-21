@@ -20,6 +20,7 @@ const { matchPortsToApps, getProcessDetails, detectWorktrees, detectStaleWorktre
 const { probe } = require('../main/healthCheck');
 const { shareInfo } = require('../main/shareInfo');
 const reserver = require('../main/portReserver');
+const { scanRuntimeCatalog } = require('../main/runtimeCatalog');
 
 function createDispatcher(configStore) {
   const handlers = {
@@ -43,6 +44,7 @@ function createDispatcher(configStore) {
       if (!Number.isInteger(safePort) || safePort < 1 || safePort > 65535) return { success: false, error: 'Invalid port' };
       return { success: true, details: await getProcessDetails(safePid, safePort) };
     },
+    'runtime:scan': async () => ({ success: true, catalog: await scanRuntimeCatalog(configStore.getApps()) }),
 
     // ---- Processes ----
     'process:kill': async (pid) => killProcess(pid),

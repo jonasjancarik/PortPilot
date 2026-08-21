@@ -5,6 +5,12 @@ All notable changes to PortPilot will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Live Docker and Compose runtime catalogue** - queries Docker Engine state, groups services by Compose project labels, shows stopped and internal-only containers, health, project working directories, and published host/container port mappings in both desktop and browser UIs.
+- **`list_runtimes` MCP tool** - gives agents the same Docker-sourced inventory and links Compose projects to registered apps by working directory.
+
 ## [3.3.0] - 2026-07-01
 
 ### Added

@@ -203,7 +203,7 @@ The extension's tree views adopt the shared model: branches nest under their pro
 - **Process Management** - Start/stop apps directly from PortPilot
 - **Smart Port Matching** - Two-phase algorithm with CWD validation and keyword extraction for accurate detection
 - **Requirement Badges** - Visual indicators for Docker, Node.js, Python, and more
-- **Docker Integration** - Click to start Docker Desktop, with status detection
+- **Live Docker Catalogue** - Discover every Docker container directly from the Engine, group Compose services by project, and show health plus host/container port mappings (including internal-only services)
 - **IPv4/IPv6 Awareness** - Shows which protocol your app is bound to
 - **System Tray** - Minimize to tray, "Stop All Apps" menu option, configurable window behaviour
 - **Single-Instance Lock** - Only one PortPilot runs at a time, focuses existing window
@@ -211,7 +211,15 @@ The extension's tree views adopt the shared model: branches nest under their pro
 - **VS Code Extension** - Status bar counter, collapsible groups, full CRUD from the sidebar
 - **Branch & worktree awareness** - run multiple git branches of one project at once, nested and colour-coded; detect a repo's worktrees and bulk-add them; stale entries flagged for removal
 - **Detail drawer** - slide-over with full command, cwd, PID, uptime, branch and safe Start/Stop/Open/Copy/Remove actions
-- **MCP with 19 tools** - Manage your entire dev environment (including `add_worktree`) via any MCP-compatible AI assistant
+- **MCP with 20 tools** - Manage apps and query the live Docker/Compose runtime catalogue via any MCP-compatible AI assistant
+
+## Docker and Compose runtime catalogue
+
+PortPilot treats Docker as a source of live runtime state, not merely as a command used to start a registered app. Every scan queries the Docker Engine and groups containers using Compose labels, so stacks started manually, by an agent, or in another terminal still appear.
+
+For each Compose project, the catalogue shows its working directory and every service—running or stopped—with image, health, container ports, and published host ports. Services without a published port remain visible as **Internal only**. When the Compose working directory matches a registered app, PortPilot links the runtime project to that app automatically.
+
+Agents can retrieve the same authoritative view with the `list_runtimes` MCP tool. This keeps Docker inventory correct after `docker compose restart`, `up`, or `down` without requiring an agent to register each container.
 
 ## Auto Detection
 
@@ -670,6 +678,7 @@ Just ask in natural language:
 | `update_app` | Update app configuration |
 | `delete_app` | Remove an app |
 | `list_running` | Show currently running apps |
+| `list_runtimes` | List live Docker containers and Compose services, including internal-only ports |
 | `scan_ports` | Scan for active ports |
 | `check_port` | Check what is running on a specific port |
 | `kill_port` | Kill process on a port |
