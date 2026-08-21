@@ -3,7 +3,7 @@
 ## Quick Start
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) 18+
+- [Node.js](https://nodejs.org/) 22.12 or newer (Node 24 LTS recommended)
 - Git (optional, for cloning)
 
 ### Installation
@@ -156,7 +156,7 @@ PortPilot/
 
 ## Tech Stack
 
-- **Electron 35+** - Cross-platform desktop framework
+- **Electron 43** - Cross-platform desktop framework
 - **Node.js** - Process management and port scanning
 - **Vanilla JS** - No framework dependencies
 - **CSS Variables** - Multi-theme system

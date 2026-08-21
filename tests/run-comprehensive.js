@@ -96,24 +96,33 @@ async function runTests() {
       const search = await window.$('#global-search');
       await search.fill('3000');
       await window.waitForTimeout(500);
-      const visible = await window.$('[data-port="3000"]');
-      const hidden = await window.$('[data-port="8080"]');
+      const matchingServices = await window.locator('.runtime-service:visible').allTextContents();
+      if (matchingServices.length === 0 || matchingServices.some(text => !text.includes('3000'))) {
+        throw new Error('Search filter not working as expected');
+      }
+      // Ports opened by one process stay grouped together, so a process that
+      // listens on both :3000 and :8080 legitimately shows both chips.
+      await search.fill('portpilot-no-such-runtime');
+      await window.waitForTimeout(500);
+      if (await window.locator('.runtime-service:visible').count() !== 0) {
+        throw new Error('No-match search should hide every runtime service');
+      }
       await search.fill('');
       await window.waitForTimeout(500);
-      if (!visible || hidden) throw new Error('Search filter not working as expected');
     });
 
     await check('Copy button on port card', async () => {
-      const card = await window.$('[data-port="3000"]');
-      const copyBtn = await card.$('button[title^="Copy localhost"]');
-      if (!copyBtn) throw new Error('Copy button not found');
+      // Unified runtime rows use the port chip itself as the copy control;
+      // legacy Active Ports rows retain a separate copy button.
+      const copyControl = window.locator(
+        'button.runtime-port.published[data-port="3000"], [data-port="3000"] button[title^="Copy localhost"]'
+      ).first();
+      if (!(await copyControl.isVisible())) throw new Error('Copy control not found');
     });
 
     await check('Kill button shows confirmation dialog', async () => {
-      const card = await window.$('[data-port="3000"]');
-      if (!card) throw new Error('Port 3000 card not found');
-      const killBtn = await card.$('button.btn-danger');
-      if (!killBtn) throw new Error('Kill button not found');
+      const killBtn = window.locator('[data-act="killPort"][data-port="3000"]').first();
+      if (!(await killBtn.isVisible())) throw new Error('Kill button not found');
 
       let dialogShown = false;
       window.once('dialog', async dialog => {

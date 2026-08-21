@@ -21,10 +21,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build Windows
         if: matrix.os == 'windows-latest'
@@ -67,12 +67,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Build and package extension
         working-directory: vscode-extension
         run: |
-          npm install
+          npm ci
           npm run compile
           npx @vscode/vsce package --no-dependencies
 

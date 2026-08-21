@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`list_runtimes` MCP tool** - gives agents the same live host and Docker inventory and links Compose projects to registered apps by working directory.
 - **Unified host runtime discovery** - groups listening host processes by PID and project, merges them with Compose projects that share a working directory, and provides running/stopped plus host/Docker filters.
 
+### Changed
+- **Electron 43 runtime** - replaces end-of-life Electron 27 and its fragile postinstall binary download with Electron's supported on-demand installer. Development and release builds now require Node.js 22.12 or newer; CI uses Node 24 LTS and reproducible `npm ci` installs.
+
 ## [3.3.0] - 2026-07-01
 
 ### Added

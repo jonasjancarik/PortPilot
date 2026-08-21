@@ -569,7 +569,7 @@ function renderRuntimeCatalog() {
     projects = projects.map((project) => ({
       ...project,
       services: project.services.filter((service) =>
-        `${project.name} ${project.workingDir || ''} ${service.name || ''} ${service.processName || ''} ${service.compose?.service || ''} ${service.image || ''} ${service.commandLine || ''}`.toLowerCase().includes(q)),
+        `${project.name} ${project.workingDir || ''} ${service.name || ''} ${service.processName || ''} ${service.compose?.service || ''} ${service.image || ''} ${service.commandLine || ''} ${JSON.stringify(service.ports || [])}`.toLowerCase().includes(q)),
     })).filter((project) => project.services.length > 0);
   }
   if (state.runtimeFilter !== 'all') {

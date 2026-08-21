@@ -716,8 +716,8 @@ started processes separately).
 
 ## Tech Stack
 
-- **Electron 27** - Cross-platform desktop framework
-- **Node.js** - Process management and port scanning
+- **Electron 43** - Cross-platform desktop framework
+- **Node.js 22.12+** - Process management, tooling, and port scanning
 - **Playwright** - End-to-end testing
 - **Vanilla JS** - No framework bloat, lightweight and fast
 - **CSS Variables** - Powerful theme system

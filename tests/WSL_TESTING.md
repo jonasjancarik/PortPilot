@@ -23,7 +23,7 @@ wsl --install -d Ubuntu
 
 ```bash
 # In WSL terminal
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt-get install -y nodejs
 ```
 
@@ -209,14 +209,14 @@ jobs:
   build-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 24
       - run: npm install
       - run: xvfb-run npm run test
       - run: npm run build:linux
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: linux-packages
           path: dist/*.{AppImage,deb}
