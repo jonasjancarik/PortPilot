@@ -2,6 +2,7 @@ const { execFile } = require('child_process');
 const fs = require('fs').promises;
 const { buildDockerProjects, dockerHostPorts } = require('../core/dockerRuntime');
 const { buildHostProjects, hostListenerPorts, normalizePath } = require('../core/hostRuntime');
+const { enrichRuntimeProjects } = require('../core/runtimeAnnotations');
 const { scanPorts } = require('./portScanner');
 
 function execFileAsync(file, args, options = {}) {
@@ -237,12 +238,13 @@ async function scanRuntimeCatalog(apps = [], options = {}) {
   const hostPorts = enrichedHostPorts.filter((portInfo) => !dockerPorts.includes(portInfo.port));
   const hostProjects = buildHostProjects(hostPorts, apps);
   const unifiedProjects = buildUnifiedProjects(projects, hostProjects);
-  const serviceCount = unifiedProjects.reduce((count, project) => count + project.services.length, 0);
-  const runningServiceCount = unifiedProjects.reduce((count, project) => count + project.runningServices, 0);
+  const enrichedProjects = enrichRuntimeProjects(unifiedProjects, options.annotations || []);
+  const serviceCount = enrichedProjects.reduce((count, project) => count + project.services.length, 0);
+  const runningServiceCount = enrichedProjects.reduce((count, project) => count + project.runningServices, 0);
   return {
     scannedAt: new Date().toISOString(),
-    projects: unifiedProjects,
-    projectCount: unifiedProjects.length,
+    projects: enrichedProjects,
+    projectCount: enrichedProjects.length,
     serviceCount,
     runningServiceCount,
     docker: {

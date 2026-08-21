@@ -212,7 +212,7 @@ The extension's tree views adopt the shared model: branches nest under their pro
 - **VS Code Extension** - Status bar counter, collapsible groups, full CRUD from the sidebar
 - **Branch & worktree awareness** - run multiple git branches of one project at once, nested and colour-coded; detect a repo's worktrees and bulk-add them; stale entries flagged for removal
 - **Detail drawer** - slide-over with full command, cwd, PID, uptime, branch and safe Start/Stop/Open/Copy/Remove actions
-- **MCP with 20 tools** - Manage apps and query the live Docker/Compose runtime catalogue via any MCP-compatible AI assistant
+- **MCP with 22 tools** - Manage apps, add user-facing runtime descriptions, and query the live Docker/Compose catalogue via any MCP-compatible AI assistant
 
 ## Host and Docker runtime catalogue
 
@@ -221,6 +221,8 @@ PortPilot treats the operating system and Docker as sources of live runtime stat
 Host processes are matched to registered apps from concrete process or working-directory evidence; anything unmatched stays visible under **Uncatalogued host processes**. Compose projects show every service—running or stopped—with image, health, container ports, and published host ports. Services without a published port remain visible as **Internal only**. When host and Docker records share a working directory, they appear together under one project.
 
 Agents can retrieve the same authoritative view with the `list_runtimes` MCP tool. It returns host listener processes and Docker workloads grouped by project, with optional running and source filters. This keeps inventory correct after normal process exits or `docker compose restart`, `up`, and `down` without requiring an agent to register each runtime.
+
+Agents can add a concise user-facing name and description to a runtime with `annotate_runtime`. These annotations are stored across scans and shown in the desktop and browser UIs, while the operating system and Docker remain authoritative for factual fields such as PID, command, image, ports, health, and running state. The tool requires the runtime ID and fingerprint returned by `list_runtimes`; if the process or container has changed, PortPilot rejects the stale update instead of attaching a description to the wrong runtime. Use `remove_runtime_annotation` to clear a saved annotation.
 
 ## Auto Detection
 
@@ -680,6 +682,8 @@ Just ask in natural language:
 | `delete_app` | Remove an app |
 | `list_running` | Show currently running apps |
 | `list_runtimes` | List host processes and Docker/Compose services grouped by project |
+| `annotate_runtime` | Save a user-facing name and description for one live runtime using its current ID and fingerprint |
+| `remove_runtime_annotation` | Remove a saved runtime annotation |
 | `scan_ports` | Scan for active ports |
 | `check_port` | Check what is running on a specific port |
 | `kill_port` | Kill process on a port |

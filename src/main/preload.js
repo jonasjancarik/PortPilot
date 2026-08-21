@@ -16,7 +16,10 @@ contextBridge.exposeInMainWorld('portpilot', {
   },
 
   runtime: {
-    scan: () => ipcRenderer.invoke('runtime:scan')
+    scan: () => ipcRenderer.invoke('runtime:scan'),
+    listAnnotations: () => ipcRenderer.invoke('runtime:listAnnotations'),
+    annotate: (annotation) => ipcRenderer.invoke('runtime:annotate', annotation),
+    deleteAnnotation: (id) => ipcRenderer.invoke('runtime:deleteAnnotation', id)
   },
 
   // Process operations

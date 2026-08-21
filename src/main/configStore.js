@@ -1,18 +1,25 @@
 const fs = require('fs');
 const path = require('path');
 const { getConfigPath } = require('../core/configPath');
+const {
+  normalizeRuntimeAnnotation,
+  upsertRuntimeAnnotation,
+  removeRuntimeAnnotation,
+} = require('../core/runtimeAnnotations');
 
 /**
  * ConfigStore - Manages persistent app configurations
  */
 class ConfigStore {
-  constructor(mainWindow = null, configPathOverride = null) {
+  constructor(mainWindow = null, configPathOverride = null, options = {}) {
     // Resolve via the shared helper so the desktop app, MCP server and web agent
     // all land on the same file (works with or without Electron).
     this.configPath = configPathOverride || getConfigPath();
     this.config = this.load();
+    if (!Array.isArray(this.config.runtimeAnnotations)) this.config.runtimeAnnotations = [];
     this.mainWindow = mainWindow;
-    this.watchConfigFile();
+    this.configWatcher = null;
+    if (options.watch !== false) this.watchConfigFile();
   }
 
   /**
@@ -27,7 +34,7 @@ class ConfigStore {
     }
 
     try {
-      fs.watch(this.configPath, (eventType) => {
+      this.configWatcher = fs.watch(this.configPath, (eventType) => {
         if (eventType === 'change') {
           // Debounce to avoid multiple rapid reloads
           clearTimeout(debounceTimer);
@@ -39,7 +46,11 @@ class ConfigStore {
 
             // Only notify if config actually changed
             if (oldConfig !== newConfig) {
-              const payload = { apps: this.config.apps, settings: this.config.settings };
+              const payload = {
+                apps: this.config.apps,
+                settings: this.config.settings,
+                runtimeAnnotations: this.config.runtimeAnnotations || [],
+              };
               if (this.mainWindow && !this.mainWindow.isDestroyed()) {
                 this.mainWindow.webContents.send('config-changed', payload);
               }
@@ -57,6 +68,11 @@ class ConfigStore {
     }
   }
 
+  close() {
+    this.configWatcher?.close();
+    this.configWatcher = null;
+  }
+
   /** Load config from disk */
   load() {
     try {
@@ -72,6 +88,7 @@ class ConfigStore {
     return {
       apps: [],
       groups: [],
+      runtimeAnnotations: [],
       settings: {
         startMinimized: false,
         autoScan: true,
@@ -216,6 +233,29 @@ class ConfigStore {
     return this.config.settings || {};
   }
 
+  /** Get persistent human metadata for discovered runtimes. */
+  getRuntimeAnnotations() {
+    return Array.isArray(this.config.runtimeAnnotations) ? this.config.runtimeAnnotations : [];
+  }
+
+  /** Validate and create or update one runtime annotation. */
+  saveRuntimeAnnotation(input) {
+    const result = upsertRuntimeAnnotation(this.getRuntimeAnnotations(), input);
+    if (result.errors.length > 0) throw new Error(result.errors.join('; '));
+    this.config.runtimeAnnotations = result.annotations;
+    this.save();
+    return { annotation: result.annotation, created: result.created };
+  }
+
+  /** Delete one runtime annotation by its stable annotation id. */
+  deleteRuntimeAnnotation(id) {
+    const result = removeRuntimeAnnotation(this.getRuntimeAnnotations(), id);
+    if (!result.removed) return null;
+    this.config.runtimeAnnotations = result.annotations;
+    this.save();
+    return result.removed;
+  }
+
   /** Update settings */
   updateSettings(newSettings) {
     this.config.settings = { ...this.config.settings, ...newSettings };
@@ -317,6 +357,12 @@ class ConfigStore {
           color: typeof g.color === 'string' ? g.color.slice(0, 20) : null
         })).filter(g => g.name);
       }
+
+      imported.runtimeAnnotations = Array.isArray(imported.runtimeAnnotations)
+        ? imported.runtimeAnnotations.map(annotation => normalizeRuntimeAnnotation(annotation, {
+          now: annotation?.updatedAt || annotation?.createdAt,
+        })).filter(Boolean)
+        : [];
 
       this.config = imported;
       this.save();

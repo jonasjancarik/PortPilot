@@ -9,6 +9,7 @@ Claude can now:
 - **Start/stop apps** by name or ID (individually or in bulk)
 - **Scan ports** to see what's running
 - **Catalogue host processes and Docker/Compose workloads** from live system state
+- **Add persistent user-facing names and descriptions** to live runtimes without changing their OS/Docker facts
 - **Add new apps** directly to PortPilot
 - **Register git worktrees / branches** so they nest under the parent project and run on their own port alongside it
 - **Kill processes** by port number
@@ -61,6 +62,8 @@ If prompted for permissions, add to `~/.claude/settings.json`:
 
 ## Available Tools
 
+The server currently exposes 22 tools. Runtime annotations are descriptive metadata only: the operating system and Docker remain authoritative for PID, command, image, ports, health, and running state. `annotate_runtime` requires the exact runtime ID and fingerprint returned by `list_runtimes`; PortPilot rejects the update when either value is stale, preventing a description from being applied to a replacement process or container.
+
 | Tool | Description |
 |------|-------------|
 | `get_status` | Overview of apps, running ports and groups |
@@ -68,6 +71,8 @@ If prompted for permissions, add to `~/.claude/settings.json`:
 | `get_app` | Get details of a specific app |
 | `list_running` | List currently running apps with ports |
 | `list_runtimes` | List host processes and Docker/Compose services unified by project |
+| `annotate_runtime` | Save a user-facing name and description for a live runtime using its current ID and fingerprint |
+| `remove_runtime_annotation` | Remove a saved runtime annotation |
 | `scan_ports` | Scan for active ports on the system |
 | `check_port` | Check whether a specific port is in use |
 | `start_app` | Start an app by ID or name |
@@ -102,6 +107,7 @@ Only `--path` is required; the branch and parent repo are auto-detected from git
 "List all my PortPilot apps"
 "Start the azure-practice-exam-platform app"
 "What's running on port 3001?"
+"Give the running PortPilot MCP server the name 'PortPilot MCP' and describe it as the local service that lets Codex inspect and manage development runtimes"
 "Add a new app called 'hero-concepts-preview' at C:\Scratch\azure-practice-exam-platform with command 'npm run web' on port 3001"
 "Stop mocksnap"
 "Kill whatever is running on port 3000"

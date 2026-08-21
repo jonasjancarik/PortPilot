@@ -23,16 +23,20 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 let runtimeCatalogModule;
 let configPathModule;
+let runtimeAnnotationsModule;
 try {
   runtimeCatalogModule = require('../src/main/runtimeCatalog.js');
   configPathModule = require('../src/core/configPath.js');
+  runtimeAnnotationsModule = require('../src/core/runtimeAnnotations.js');
 } catch {
   const packagedSourceRoot = path.join(process.resourcesPath, 'app.asar', 'src');
   runtimeCatalogModule = require(path.join(packagedSourceRoot, 'main', 'runtimeCatalog.js'));
   configPathModule = require(path.join(packagedSourceRoot, 'core', 'configPath.js'));
+  runtimeAnnotationsModule = require(path.join(packagedSourceRoot, 'core', 'runtimeAnnotations.js'));
 }
 const { scanRuntimeCatalog } = runtimeCatalogModule;
 const { getConfigPath } = configPathModule;
+const { upsertRuntimeAnnotation, removeRuntimeAnnotation, servicePorts } = runtimeAnnotationsModule;
 
 // =============================================================================
 // CONFIG
@@ -58,6 +62,18 @@ function writeConfig(config) {
 
 function generateId() {
   return `app_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+}
+
+function findRuntime(catalog, runtimeId) {
+  for (const project of catalog.projects || []) {
+    const service = (project.services || []).find(item => item.runtimeId === runtimeId);
+    if (service) return { project, service };
+  }
+  return null;
+}
+
+function firstRuntimePort(service) {
+  return [...servicePorts(service)].sort((a, b) => a - b)[0] || null;
 }
 
 // =============================================================================
@@ -480,7 +496,10 @@ function createServer() {
       const ports = scanPorts();
       const apps = config.apps || [];
       const running = computeRunning(apps, ports);
-      const catalog = await scanRuntimeCatalog(apps, { hostPorts: ports });
+      const catalog = await scanRuntimeCatalog(apps, {
+        hostPorts: ports,
+        annotations: config.runtimeAnnotations || [],
+      });
       return {
         content: [{
           type: 'text',
@@ -506,7 +525,7 @@ function createServer() {
 
   server.tool(
     'list_runtimes',
-    'List the authoritative local runtime catalogue: host listener processes plus Docker containers and Compose services, unified by project working directory.',
+    'List the authoritative local runtime catalogue, including exact runtime IDs and fingerprints required by annotate_runtime.',
     {
       running_only: z.boolean().optional().describe('Only include running host and Docker services'),
       project: z.string().optional().describe('Filter by registered app, Compose project, or uncatalogued host group'),
@@ -514,7 +533,9 @@ function createServer() {
     },
     async ({ running_only, project, source }) => {
       const config = readConfig();
-      const catalog = await scanRuntimeCatalog(config.apps || []);
+      const catalog = await scanRuntimeCatalog(config.apps || [], {
+        annotations: config.runtimeAnnotations || [],
+      });
       let projects = catalog.projects;
       if (project) projects = projects.filter(item => item.name.toLowerCase() === project.toLowerCase());
       projects = projects.map(item => ({
@@ -553,6 +574,82 @@ function createServer() {
         projects,
       };
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'annotate_runtime',
+    'Give one currently running process or container a useful display name and description in PortPilot. Use the exact runtime_id and runtime_fingerprint from list_runtimes; stale identities are rejected.',
+    {
+      runtime_id: z.string().min(1).describe('Exact runtimeId returned by list_runtimes'),
+      runtime_fingerprint: z.string().min(1).describe('Exact runtimeFingerprint returned by list_runtimes'),
+      name: z.string().min(1).max(240).describe('Concise user-facing name, such as "Checkout API"'),
+      description: z.string().min(1).max(4000).describe('What this runtime does and why it is running'),
+      launched_by: z.string().min(1).max(240).optional().describe('Agent or person that launched it; defaults to Codex'),
+      task: z.string().min(1).max(500).optional().describe('Optional task or purpose associated with the runtime'),
+    },
+    async ({ runtime_id, runtime_fingerprint, name, description, launched_by, task }) => {
+      const config = readConfig();
+      if (!Array.isArray(config.runtimeAnnotations)) config.runtimeAnnotations = [];
+      const catalog = await scanRuntimeCatalog(config.apps || [], { annotations: config.runtimeAnnotations });
+      const currentRuntime = findRuntime(catalog, runtime_id);
+      if (!currentRuntime) {
+        return {
+          content: [{ type: 'text', text: `Runtime not found: ${runtime_id}. Refresh list_runtimes before annotating.` }],
+          isError: true,
+        };
+      }
+
+      const { project, service } = currentRuntime;
+      const result = upsertRuntimeAnnotation(config.runtimeAnnotations, {
+        runtimeId: runtime_id,
+        runtimeFingerprint: runtime_fingerprint,
+        name,
+        description,
+        cwd: project.workingDir || service.workingDir || service.cwd || null,
+        port: firstRuntimePort(service),
+        pid: service.pid || null,
+        composeProject: service.compose?.project || service.composeProject || null,
+        composeService: service.compose?.service || service.composeService || null,
+        launchedBy: launched_by || 'Codex',
+        task: task || null,
+      }, { currentRuntime });
+      if (result.errors.length > 0) {
+        return { content: [{ type: 'text', text: result.errors.join('; ') }], isError: true };
+      }
+
+      config.runtimeAnnotations = result.annotations;
+      writeConfig(config);
+      const refreshed = await scanRuntimeCatalog(config.apps || [], { annotations: config.runtimeAnnotations });
+      const enriched = findRuntime(refreshed, runtime_id);
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            created: result.created,
+            annotation: result.annotation,
+            runtime: enriched?.service || null,
+          }, null, 2),
+        }],
+      };
+    }
+  );
+
+  server.tool(
+    'remove_runtime_annotation',
+    'Remove user-supplied name and description metadata from a runtime.',
+    {
+      annotation_id: z.string().min(1).describe('Annotation id returned by annotate_runtime or list_runtimes'),
+    },
+    async ({ annotation_id }) => {
+      const config = readConfig();
+      const result = removeRuntimeAnnotation(config.runtimeAnnotations || [], annotation_id);
+      if (!result.removed) {
+        return { content: [{ type: 'text', text: `Runtime annotation not found: ${annotation_id}` }], isError: true };
+      }
+      config.runtimeAnnotations = result.annotations;
+      writeConfig(config);
+      return { content: [{ type: 'text', text: JSON.stringify({ removed: result.removed }, null, 2) }] };
     }
   );
 

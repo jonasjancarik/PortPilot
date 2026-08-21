@@ -419,11 +419,32 @@ function setupIpcHandlers(ipcMain, configStore) {
     try {
       return {
         success: true,
-        catalog: await scanRuntimeCatalog(configStore.getApps(), { managedApps: getRunningApps() }),
+        catalog: await scanRuntimeCatalog(configStore.getApps(), {
+          managedApps: getRunningApps(),
+          annotations: configStore.getRuntimeAnnotations(),
+        }),
       };
     } catch (error) {
       return { success: false, error: error.message };
     }
+  });
+
+  ipcMain.handle('runtime:listAnnotations', async () => ({
+    success: true,
+    annotations: configStore.getRuntimeAnnotations(),
+  }));
+
+  ipcMain.handle('runtime:annotate', async (_, annotation) => {
+    try {
+      return { success: true, ...configStore.saveRuntimeAnnotation(annotation) };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('runtime:deleteAnnotation', async (_, id) => {
+    const removed = configStore.deleteRuntimeAnnotation(id);
+    return { success: !!removed, removed, error: removed ? null : 'Runtime annotation not found' };
   });
 
   /** Check if specific port is in use */

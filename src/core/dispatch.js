@@ -46,8 +46,23 @@ function createDispatcher(configStore) {
     },
     'runtime:scan': async () => ({
       success: true,
-      catalog: await scanRuntimeCatalog(configStore.getApps(), { managedApps: getRunningApps() }),
+      catalog: await scanRuntimeCatalog(configStore.getApps(), {
+        managedApps: getRunningApps(),
+        annotations: configStore.getRuntimeAnnotations(),
+      }),
     }),
+    'runtime:listAnnotations': async () => ({
+      success: true,
+      annotations: configStore.getRuntimeAnnotations(),
+    }),
+    'runtime:annotate': async (annotation) => ({
+      success: true,
+      ...configStore.saveRuntimeAnnotation(annotation),
+    }),
+    'runtime:deleteAnnotation': async (id) => {
+      const removed = configStore.deleteRuntimeAnnotation(id);
+      return { success: !!removed, removed, error: removed ? null : 'Runtime annotation not found' };
+    },
 
     // ---- Processes ----
     'process:kill': async (pid) => killProcess(pid),

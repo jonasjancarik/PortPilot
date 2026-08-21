@@ -51,7 +51,10 @@
       getDetails: (pid, port) => call('ports:getDetails', pid, port)
     },
     runtime: {
-      scan: () => call('runtime:scan')
+      scan: () => call('runtime:scan'),
+      listAnnotations: () => call('runtime:listAnnotations'),
+      annotate: (annotation) => call('runtime:annotate', annotation),
+      deleteAnnotation: (id) => call('runtime:deleteAnnotation', id)
     },
     process: {
       kill: (pid) => call('process:kill', pid),

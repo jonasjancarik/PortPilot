@@ -569,7 +569,7 @@ function renderRuntimeCatalog() {
     projects = projects.map((project) => ({
       ...project,
       services: project.services.filter((service) =>
-        `${project.name} ${project.workingDir || ''} ${service.name || ''} ${service.processName || ''} ${service.compose?.service || ''} ${service.image || ''} ${service.commandLine || ''} ${JSON.stringify(service.ports || [])}`.toLowerCase().includes(q)),
+        `${project.name} ${project.workingDir || ''} ${service.displayName || ''} ${service.description || ''} ${service.name || ''} ${service.processName || ''} ${service.compose?.service || ''} ${service.image || ''} ${service.commandLine || ''} ${JSON.stringify(service.ports || [])}`.toLowerCase().includes(q)),
     })).filter((project) => project.services.length > 0);
   }
   if (state.runtimeFilter !== 'all') {
@@ -624,7 +624,7 @@ function renderRuntimeProject(project) {
 
 function renderRuntimeService(service) {
   const source = service.sourceKind || service.source || 'docker';
-  const serviceName = service.compose?.service || service.processName || service.name;
+  const serviceName = service.displayName || service.compose?.service || service.processName || service.name;
   const statusLabel = service.running && service.health ? service.health : (service.status || (service.running ? 'running' : 'stopped'));
   const statusClass = service.running ? (service.health === 'unhealthy' ? 'error' : 'running') : 'stopped';
   const portMarkup = (service.ports || []).length === 0
@@ -644,8 +644,11 @@ function renderRuntimeService(service) {
       ).join('');
       }).join('');
 
-  const detail = service.image || service.commandLine || (source === 'host' ? 'Host process' : 'Unknown image');
-  const statusDetail = source === 'host' && service.pid ? `PID ${service.pid} · ${statusLabel}` : statusLabel;
+  const factualDetail = service.image || service.commandLine || (source === 'host' ? 'Host process' : 'Unknown image');
+  const detail = service.description || factualDetail;
+  const detailTitle = service.description ? `${service.description}\n${factualDetail}` : factualDetail;
+  const provenance = service.provenance?.launchedBy ? ` · ${service.provenance.launchedBy}` : '';
+  const statusDetail = source === 'host' && service.pid ? `PID ${service.pid} · ${statusLabel}${provenance}` : `${statusLabel}${provenance}`;
   const firstHostPort = source === 'host' ? Number(service.ports?.[0]) : null;
   const hostGroup = firstHostPort ? window.PortPilotStatus.classify({
     port: firstHostPort,
@@ -663,7 +666,7 @@ function renderRuntimeService(service) {
   return `<div class="runtime-service">
     <span class="status-dot ${statusClass}" title="${escapeHtml(statusLabel)}"></span>
     <span class="runtime-service-name" title="${escapeHtml(service.name || service.processName)}">${escapeHtml(serviceName)}</span>
-    <span class="runtime-service-image" title="${escapeHtml(detail)}">${escapeHtml(detail)}</span>
+    <span class="runtime-service-image" title="${escapeHtml(detailTitle)}">${escapeHtml(detail)}</span>
     <span class="runtime-service-ports">${portMarkup}</span>
     <span class="runtime-service-status"><span>${escapeHtml(statusDetail)}</span>${hostActions}</span>
   </div>`;
