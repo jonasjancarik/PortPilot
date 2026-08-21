@@ -18,6 +18,30 @@ if (process.env.PORTPILOT_CONFIG_DIR) {
 }
 if (process.env.PORTPILOT_DEV_MODE === '1') app.setName('PortPilot Dev');
 
+/** Start the shared HTTP MCP server independently of window/tray setup. */
+function startMcpServer() {
+  if (mcpServer) return;
+  try {
+    const { fork } = require('child_process');
+    const mcpEntry = app.isPackaged
+      ? path.join(process.resourcesPath, 'mcp-server', 'index.js')
+      : path.join(__dirname, '..', '..', 'mcp-server', 'index.js');
+    const mcpPort = process.env.PORTPILOT_MCP_PORT || '8788';
+    mcpServer = fork(mcpEntry, ['--port', mcpPort], {
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      stdio: ['ignore', 'ignore', 'inherit', 'ipc'],
+    });
+    mcpServer.on('error', (err) => console.error('MCP server failed to start:', err));
+    mcpServer.on('exit', (code) => {
+      if (code) console.error(`PortPilot MCP server exited with code ${code}`);
+      mcpServer = null;
+    });
+    console.log(`PortPilot MCP HTTP server starting on port ${mcpPort}`);
+  } catch (err) {
+    console.error('Failed to start MCP HTTP server:', err);
+  }
+}
+
 /** Create the main application window */
 function createWindow(configStore) {
   mainWindow = new BrowserWindow({
@@ -142,6 +166,10 @@ if (!gotTheLock) {
   app.quit();
 } else {
   // We have the lock - this is the primary instance
+  // Start MCP before optional desktop setup so the endpoint remains available
+  // even if window/tray initialization encounters a platform-specific error.
+  startMcpServer();
+
   // Handle second-instance attempts by focusing our window
   if (!isTestMode) {
     app.on('second-instance', (event, commandLine, workingDirectory) => {
@@ -194,32 +222,6 @@ if (!gotTheLock) {
       } catch (err) {
         console.error('Failed to apply login item settings:', err);
       }
-    }
-
-    // ============ Shared MCP HTTP server ============
-    // One long-lived process serving every Claude session over HTTP, instead of
-    // each session spawning its own stdio child. Register clients against
-    // http://127.0.0.1:<port>/mcp (default 8788).
-    // Forked via ELECTRON_RUN_AS_NODE so Electron's bundled Node runs the ESM
-    // server (utilityProcess.fork can't load an ESM entry).
-    try {
-      const { fork } = require('child_process');
-      const mcpEntry = app.isPackaged
-        ? path.join(process.resourcesPath, 'mcp-server', 'index.js')
-        : path.join(__dirname, '..', '..', 'mcp-server', 'index.js');
-      const mcpPort = process.env.PORTPILOT_MCP_PORT || '8788';
-      mcpServer = fork(mcpEntry, ['--port', mcpPort], {
-        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-        stdio: ['ignore', 'ignore', 'inherit', 'ipc'],
-      });
-      mcpServer.on('error', (err) => console.error('MCP server failed to start:', err));
-      mcpServer.on('exit', (code) => {
-        if (code) console.error(`PortPilot MCP server exited with code ${code}`);
-        mcpServer = null;
-      });
-      console.log(`PortPilot MCP HTTP server starting on port ${mcpPort}`);
-    } catch (err) {
-      console.error('Failed to start MCP HTTP server:', err);
     }
 
     // Tray update - renderer sends running apps list whenever state changes

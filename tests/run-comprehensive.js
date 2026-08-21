@@ -7,7 +7,10 @@
  * dependencies installed (`npm install`).
  */
 const { _electron: electron } = require('playwright');
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
+const net = require('net');
 const { getPlatformInfo } = require('./platform-helpers');
 const { startTestServers, stopTestServers } = require('./test-servers');
 
@@ -25,6 +28,8 @@ async function runTests() {
   let failed = 0;
   let electronApp;
   let window;
+  let testConfigDir;
+  let mcpPort;
 
   const check = async (name, fn) => {
     console.log(`\nTest: ${name}...`);
@@ -46,11 +51,18 @@ async function runTests() {
     console.log('🚀 Launching PortPilot...');
     const electronPath = require('electron');
     const appPath = path.join(__dirname, '..');
+    testConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'portpilot-e2e-'));
+    mcpPort = await findAvailableTcpPort();
 
     electronApp = await electron.launch({
       executablePath: electronPath,
       args: [appPath],
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined }
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: undefined,
+        PORTPILOT_CONFIG_DIR: testConfigDir,
+        PORTPILOT_MCP_PORT: String(mcpPort)
+      }
     });
 
     window = await electronApp.firstWindow();
@@ -69,6 +81,16 @@ async function runTests() {
     await check('Window title', async () => {
       const title = await window.title();
       if (!title.includes('PortPilot')) throw new Error(`Expected "PortPilot", got "${title}"`);
+    });
+
+    await check('MCP server is listening', async () => {
+      await new Promise((resolve, reject) => {
+        const socket = net.createConnection({ host: '127.0.0.1', port: mcpPort });
+        socket.setTimeout(5000);
+        socket.once('connect', () => { socket.destroy(); resolve(); });
+        socket.once('timeout', () => { socket.destroy(); reject(new Error(`Timed out connecting to MCP port ${mcpPort}`)); });
+        socket.once('error', reject);
+      });
     });
 
     await check('Port scanning', async () => {
@@ -167,6 +189,7 @@ async function runTests() {
       await electronApp.close();
       console.log('\n✅ PortPilot closed');
     }
+    if (testConfigDir) fs.rmSync(testConfigDir, { recursive: true, force: true });
     console.log('🛑 Stopping test servers...');
     await stopTestServers();
     console.log('✅ Test servers stopped');
@@ -184,6 +207,18 @@ async function runTests() {
   console.log('========================================\n');
 
   process.exit(failed > 0 ? 1 : 0);
+}
+
+function findAvailableTcpPort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once('error', reject);
+    server.listen(0, '0.0.0.0', () => {
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : null;
+      server.close((error) => error ? reject(error) : resolve(port));
+    });
+  });
 }
 
 runTests().catch(err => {

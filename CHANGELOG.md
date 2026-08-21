@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Packaged MCP startup** - shared runtime modules now retain their CommonJS module boundary inside the ESM MCP package, so the installed app can start its HTTP MCP server.
+- **MCP availability during desktop startup** - the HTTP MCP child now starts immediately after the single-instance lock, independently of optional window and tray initialization.
 
 ## [3.3.0] - 2026-07-01
 
