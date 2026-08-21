@@ -723,6 +723,8 @@ started processes separately).
 - **CSS Variables** - Powerful theme system
 - **Native Commands** - `netstat` (Windows) / `lsof` (Mac/Linux)
 
+Development mode (`npm run dev`) uses a separate `portpilot-dev` user-data directory and MCP port `8789`, so it can run alongside an installed PortPilot app. Both instances still discover the same live host processes and Docker workloads. Production macOS packages can be built unsigned with `npm run build:mac`.
+
 ## Version History
 
 ### v3.3.0 (2026-07-01) - Current Release

@@ -6,8 +6,10 @@
  * covers the framework-free logic in src/core so it can run anywhere in CI.
  */
 const assert = require('assert');
+const path = require('path');
 const { classify, statusOf, STATES, GROUPS, GROUP_ORDER } = require('../src/core/status');
 const { buildDockerProjects, dockerHostPorts, normalizeContainer } = require('../src/core/dockerRuntime');
+const { computeDir, getConfigPath } = require('../src/core/configPath');
 
 let passed = 0;
 let failed = 0;
@@ -182,6 +184,21 @@ t('keeps identical Compose project names in different working directories separa
   second.Config.Labels['com.docker.compose.project.working_dir'] = '/work/other';
   const projects = buildDockerProjects([composeInspect, second]);
   assert.strictEqual(projects.length, 2);
+});
+
+t('PORTPILOT_CONFIG_DIR isolates development state when set', () => {
+  const previous = process.env.PORTPILOT_CONFIG_DIR;
+  process.env.PORTPILOT_CONFIG_DIR = '/tmp/portpilot-dev-test';
+  try {
+    assert.strictEqual(computeDir(), path.resolve('/tmp/portpilot-dev-test'));
+    assert.strictEqual(
+      getConfigPath(),
+      path.join(path.resolve('/tmp/portpilot-dev-test'), 'portpilot-config.json')
+    );
+  } finally {
+    if (previous === undefined) delete process.env.PORTPILOT_CONFIG_DIR;
+    else process.env.PORTPILOT_CONFIG_DIR = previous;
+  }
 });
 
 // ---- summary --------------------------------------------------------------

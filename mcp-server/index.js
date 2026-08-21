@@ -22,33 +22,20 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 let runtimeCatalogModule;
+let configPathModule;
 try {
   runtimeCatalogModule = require('../src/main/runtimeCatalog.js');
+  configPathModule = require('../src/core/configPath.js');
 } catch {
   runtimeCatalogModule = require('./src/main/runtimeCatalog.js');
+  configPathModule = require('./src/core/configPath.js');
 }
 const { scanRuntimeCatalog } = runtimeCatalogModule;
+const { getConfigPath } = configPathModule;
 
 // =============================================================================
 // CONFIG
 // =============================================================================
-
-function getConfigPath() {
-  const platform = os.platform();
-  let configDir;
-  // NOTE: must match Electron's app.getPath('userData'), which is derived from
-  // the lowercase package.json "name" ("portpilot"). Using "PortPilot" (capital)
-  // here works on case-insensitive Windows but reads a DIFFERENT file on
-  // Linux/macOS, so the MCP server would never see the desktop app's config.
-  if (platform === 'win32') {
-    configDir = path.join(process.env.APPDATA || '', 'portpilot');
-  } else if (platform === 'darwin') {
-    configDir = path.join(os.homedir(), 'Library', 'Application Support', 'portpilot');
-  } else {
-    configDir = path.join(os.homedir(), '.config', 'portpilot');
-  }
-  return path.join(configDir, 'portpilot-config.json');
-}
 
 function readConfig() {
   try {

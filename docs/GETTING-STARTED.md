@@ -32,6 +32,16 @@ npm start        # Standard launch
 npm run dev      # Development mode with debug flags
 ```
 
+Development mode stores its configuration under a separate `portpilot-dev` directory and starts its MCP server on port `8789`. The installed app keeps the normal PortPilot configuration and port `8788`; both scan the same live OS and Docker state.
+
+### Production Builds
+
+```bash
+npm run build:mac    # unsigned macOS DMG
+npm run build:linux  # AppImage + deb
+npm run build        # Windows NSIS + portable targets
+```
+
 ### From File Explorer
 Double-click `launch.bat` to start PortPilot.
 

@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Electron 43 runtime** - replaces end-of-life Electron 27 and its fragile postinstall binary download with Electron's supported on-demand installer. Development and release builds now require Node.js 22.12 or newer; CI uses Node 24 LTS and reproducible `npm ci` installs.
+- **Isolated development runtime** - `npm run dev` now uses a separate `portpilot-dev` profile and MCP port `8789`, allowing it to run beside the installed app without sharing in-memory process state or colliding with production MCP on `8788`.
+- **macOS production build** - `npm run build:mac` creates an unsigned DMG without inspecting signing identities or publishing artifacts.
 
 ## [3.3.0] - 2026-07-01
 

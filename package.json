@@ -23,6 +23,7 @@
     "_comment_legacy_tests": "v1.3/v1.7/groups specs target the pre-v2.0 tab UI and need rewriting before re-enabling",
     "screenshots": "node take-screenshots.js",
     "build": "electron-builder --win",
+    "build:mac": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg --publish never",
     "build:linux": "electron-builder --linux",
     "build:portable": "electron-builder --win portable",
     "build:all": "electron-builder --win nsis portable",
@@ -76,6 +77,10 @@
         "to": "mcp-server/src/core/hostRuntime.js"
       },
       {
+        "from": "src/core/configPath.js",
+        "to": "mcp-server/src/core/configPath.js"
+      },
+      {
         "from": "src/main/portScanner.js",
         "to": "mcp-server/src/main/portScanner.js"
       },
@@ -116,6 +121,12 @@
     },
     "portable": {
       "artifactName": "${productName}-${version}-portable.${ext}"
+    },
+    "mac": {
+      "icon": "public/icon-512.png",
+      "category": "public.app-category.developer-tools",
+      "identity": null,
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "linux": {
       "target": [

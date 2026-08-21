@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, nativeTheme, Notification } = require('electron');
+const fs = require('fs');
 const path = require('path');
 const { setupIpcHandlers } = require('./ipcHandlers');
 const { ConfigStore } = require('./configStore');
@@ -7,6 +8,15 @@ let mainWindow = null;
 let tray = null;
 let webAgent = null;  // opt-in loopback web agent (Option C), shares this process's configStore
 let mcpServer = null; // shared HTTP MCP server: one process for every Claude session, vs one stdio child per session
+
+// Development uses a separate Electron profile and single-instance lock. The
+// launcher also assigns a separate PortPilot config directory and MCP port.
+if (process.env.PORTPILOT_CONFIG_DIR) {
+  const userDataDir = path.resolve(process.env.PORTPILOT_CONFIG_DIR);
+  fs.mkdirSync(userDataDir, { recursive: true });
+  app.setPath('userData', userDataDir);
+}
+if (process.env.PORTPILOT_DEV_MODE === '1') app.setName('PortPilot Dev');
 
 /** Create the main application window */
 function createWindow(configStore) {
